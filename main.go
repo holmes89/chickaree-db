@@ -1,13 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"text/scanner"
 )
 
@@ -36,15 +37,14 @@ func main() {
 		if err != nil {
 			fmt.Printf("err: %v", err)
 		}
-		fmt.Printf("%+v", req)
-		// command := strings.TrimSpace(string(line))
-		// switch command {
-		// case "*1":
-		// 	c.Write([]byte("+PONG\r\n"))
-		// default:
-		// 	fmt.Printf("unknown: %v\n", command)
-		// 	c.Write([]byte(fmt.Sprintf("-ERR unknown command '%s'\r\n", command)))
-		// }
+		fmt.Printf("%+v\n", req)
+		switch req.command {
+		case "ping":
+			c.Write([]byte("+PONG\r\n"))
+		default:
+			fmt.Printf("unknown: %v\n", req.command)
+			c.Write([]byte(fmt.Sprintf("-ERR unknown command '%s'\r\n", req.command)))
+		}
 	}
 }
 
@@ -55,75 +55,31 @@ type lexer struct {
 
 // New returns new lexer
 func Read(r io.Reader) (Request, error) {
-	var s scanner.Scanner
-	s.Init(r)
-	s.Mode &^= scanner.ScanChars | scanner.ScanRawStrings
-	l := &lexer{
-		Scanner: &s,
-	}
-	return l.readForm()
-}
+	scanner := bufio.NewScanner(r)
+	scanner.Split(bufio.ScanLines)
 
-func (l *lexer) readForm() (Request, error) {
 	req := Request{}
-	test, err := l.readUntilNextLine()
-	if err != nil {
-		return req, err
-	}
-	fmt.Println(test)
-	test, err = l.readUntilNextLine()
-	if err != nil {
-		return req, err
-	}
-	fmt.Println(test)
-	cs, err := l.readUntilNextLine()
-	if err != nil {
-		return req, err
-	}
-	i, err := strconv.Atoi(cs[1:])
-	if err != nil {
-		return req, fmt.Errorf("invalid token %s", cs)
-	}
-	req.argCount = i
 
-	_, err = l.readUntilNextLine() // next line is info telling us the next line size
-	if err != nil {
-		return req, err
-	}
-
-	req.command, err = l.readUntilNextLine()
-	if err != nil {
-		return req, err
-	}
-
-	for j := i - 1; j > 0; j-- {
-		_, err = l.readUntilNextLine() // next line is info telling us the next line size
-		if err != nil {
-			return req, err
+	for scanner.Scan() {
+		if req.argCount == 0 {
+			req.argCount, _ = strconv.Atoi(scanner.Text()[1:])
+			continue
+		}
+		if scanner.Text()[0] == '$' {
+			continue
+		}
+		if req.command == "" {
+			req.command = strings.ToLower(scanner.Text())
+		} else {
+			req.args = append(req.args, scanner.Text())
 		}
 
-		arg, err := l.readUntilNextLine()
-		if err != nil {
-			return req, err
-		}
-		req.args = append(req.args, arg)
-	}
-	return req, nil
-}
-
-func (l *lexer) readUntilNextLine() (string, error) {
-	for {
-		r := l.Next()
-		if r == scanner.EOF {
-			return "", errors.New("invalid command")
-		}
-		if r == '\r' && l.Peek() == '\n' {
-			l.Next()
+		if req.command != "" && len(req.args) == (req.argCount-1) { // don't count command
 			break
 		}
-		l.buf.WriteRune(r)
 	}
-	return l.String(), nil
+
+	return req, nil
 }
 
 type Request struct {
