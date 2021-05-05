@@ -1,7 +1,6 @@
-package storage
+package core
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/boltdb/bolt"
@@ -9,8 +8,8 @@ import (
 
 type Arg []byte
 type Repository interface {
-	Set(args []Arg) error
-	Get(args []Arg) ([]byte, error)
+	Set(key []Arg) Response
+	Get(key []Arg) Response
 	Close() error
 }
 
@@ -38,20 +37,29 @@ func (r *repo) Close() error {
 	return r.db.Close()
 }
 
-func (r *repo) Set(args []Arg) error {
-	return r.db.Update(func(tx *bolt.Tx) error {
+func (r *repo) Set(args []Arg) Response {
+	err := r.db.Update(func(tx *bolt.Tx) error {
 		return tx.Bucket(defaultBucket).Put(args[0], args[1])
 	})
+	if err != nil {
+		return ErrResponse(err)
+	}
+	return OkResp
 }
 
-func (r *repo) Get(args []Arg) (b []byte, err error) {
+func (r *repo) Get(args []Arg) Response {
+	var b []byte
 	r.db.View(func(tx *bolt.Tx) error {
 		b = tx.Bucket(defaultBucket).Get(args[0])
 		return nil
 	})
-	l := len(b)
-	la := []byte(fmt.Sprintf("$%d\r\n", l))
-	b = append(la, b...)
-	b = append(b, []byte("\r\n")...)
-	return b, nil
+	if len(b) == 0 {
+		return NilStringResp
+	}
+	res := Response{
+		rtype:   BulkStrings,
+		content: b,
+		length:  len(b),
+	}
+	return res
 }
