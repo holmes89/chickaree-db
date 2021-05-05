@@ -10,13 +10,16 @@ import (
 	"strconv"
 	"strings"
 	"text/scanner"
+
+	"github.com/holmes89/chickaree-db/storage"
 )
 
 var allClients map[*Client]int
+var repo storage.Repository // todo, no global?
 
 type Client struct {
 	// incoming chan string
-	outgoing   chan string
+	outgoing   chan []byte
 	reader     *bufio.Reader
 	writer     *bufio.Writer
 	conn       net.Conn
@@ -29,11 +32,24 @@ func (client *Client) Read() {
 		if err == nil {
 			switch strings.ToLower(req.command) {
 			case "command":
-				client.outgoing <- "+OK\r\n"
+				client.outgoing <- []byte("+OK\r\n")
 			case "ping":
-				client.outgoing <- "+PONG\r\n"
+				client.outgoing <- []byte("+PONG\r\n")
+			case "set":
+				if e := repo.Set(req.args); e != nil {
+					client.outgoing <- []byte("-ERR unable to set value\r\n")
+					continue
+				}
+				client.outgoing <- []byte("+OK\r\n")
+			case "get":
+				r, e := repo.Get(req.args)
+				if e != nil {
+					client.outgoing <- []byte(fmt.Sprintf("-ERR unable to get value with key '%s'\r\n", req.command))
+					continue
+				}
+				client.outgoing <- r
 			default:
-				fmt.Printf("DONT KNOW: %s\n", req.command)
+				client.outgoing <- []byte(fmt.Sprintf("-ERR unknown command '%s'\r\n", req.command))
 			}
 			fmt.Printf("%+v\n", req)
 		} else {
@@ -53,7 +69,7 @@ func (client *Client) Read() {
 func (client *Client) Write() {
 	for data := range client.outgoing {
 		fmt.Println(data)
-		client.writer.WriteString(data)
+		client.writer.Write(data)
 		client.writer.Flush()
 	}
 }
@@ -71,7 +87,7 @@ func NewClient(connection net.Conn) *Client {
 	reader := bufio.NewReader(connection)
 
 	client := &Client{
-		outgoing: make(chan string),
+		outgoing: make(chan []byte),
 		conn:     connection,
 		reader:   reader,
 		writer:   writer,
@@ -84,7 +100,6 @@ func NewClient(connection net.Conn) *Client {
 func main() {
 
 	allClients = make(map[*Client]int)
-
 	var port string
 	flag.StringVar(&port, "port", "6379", "port to listen on")
 
@@ -98,6 +113,9 @@ func main() {
 	}
 	defer listener.Close()
 
+	repo = storage.NewRepo("chickaree.db")
+	defer repo.Close()
+
 	fmt.Printf("listening on port %s\n", PORT)
 
 	for {
@@ -109,7 +127,7 @@ func main() {
 			panic("no conn")
 		}
 		client := NewClient(conn)
-		for clientList, _ := range allClients {
+		for clientList := range allClients {
 			if clientList.connection == nil {
 				client.connection = clientList
 				clientList.connection = client
@@ -185,9 +203,9 @@ func parseRequest(r io.Reader) (req Request, err error) {
 		if c != int(bufsize) {
 			return req, io.EOF
 		}
-		req.args = append(req.args, string(b[:len(b)-2]))
+		req.args = append(req.args, b[:len(b)-2])
 	}
-	req.command = req.args[0]
+	req.command = string(req.args[0])
 	req.args = req.args[1:]
 
 	return req, nil
@@ -260,6 +278,6 @@ func getSize(r io.Reader) (int, error) {
 
 type Request struct {
 	msgCount int
-	args     []string
+	args     []storage.Arg
 	command  string
 }
