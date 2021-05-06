@@ -12,10 +12,6 @@ type Request struct {
 	command  string
 }
 
-func (req *Request) Decode(r io.Reader) error {
-	return nil
-}
-
 type Response struct {
 	rtype   RESPType
 	length  int
@@ -81,7 +77,7 @@ func ErrResponse(err error) Response {
 	}
 }
 
-func parseRequest(r io.Reader) (req Request, err error) {
+func NewRequest(r io.Reader) (req Request, err error) {
 
 	req.msgCount, err = getSize(r)
 	if err != nil {

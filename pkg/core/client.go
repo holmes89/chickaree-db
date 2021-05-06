@@ -18,7 +18,7 @@ type Client struct {
 
 func (client *Client) Read() {
 	for {
-		req, err := parseRequest(client.reader)
+		req, err := NewRequest(client.reader)
 		if err == nil {
 			switch strings.ToLower(req.command) {
 			case "command":
@@ -33,7 +33,7 @@ func (client *Client) Read() {
 			case "get":
 				client.outgoing <- client.repo.Get(req.args).Encode()
 			default:
-				err := fmt.Errorf("-ERR unknown command '%s'\r\n", req.command)
+				err := fmt.Errorf("unknown command '%s'", req.command)
 				client.outgoing <- ErrResponse(err).Encode()
 			}
 		} else {
