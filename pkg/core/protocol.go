@@ -18,10 +18,26 @@ type Response struct {
 	content []byte
 }
 
+type ResponseArray []Response
+
+func (res ResponseArray) Encode() []byte {
+	length := strconv.Itoa(len(res))
+
+	buf := new(bytes.Buffer)
+	buf.WriteRune(rune(Arrays))
+	buf.WriteString(length)
+	buf.Write(TerminationSeq)
+	for _, r := range res {
+		buf.Write(r.Encode())
+	}
+	return buf.Bytes()
+}
+
 func (res Response) SetContent(c []byte) {
 	res.content = c
 	res.length = len(c)
 }
+
 func (res Response) Encode() []byte {
 
 	buf := new(bytes.Buffer)

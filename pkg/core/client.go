@@ -32,6 +32,12 @@ func (client *Client) Read() {
 				client.outgoing <- client.repo.Set(req.args).Encode()
 			case "hset":
 				client.outgoing <- client.repo.HSet(req.args).Encode()
+			case "hget":
+				client.outgoing <- client.repo.HGet(req.args).Encode()
+			case "hexists":
+				client.outgoing <- client.repo.HExists(req.args).Encode()
+			case "hgetall":
+				client.outgoing <- client.repo.HGetAll(req.args).Encode()
 			case "get":
 				client.outgoing <- client.repo.Get(req.args).Encode()
 			case "del":
