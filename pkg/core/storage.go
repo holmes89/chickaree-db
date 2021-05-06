@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/boltdb/bolt"
@@ -10,6 +11,8 @@ type Arg []byte
 type Repository interface {
 	Set(key []Arg) Response
 	Get(key []Arg) Response
+	Del(key []Arg) Response
+	HSet(key []Arg) Response
 	Close() error
 }
 
@@ -62,4 +65,58 @@ func (r *repo) Get(args []Arg) Response {
 		length:  len(b),
 	}
 	return res
+}
+
+func (r *repo) HSet(args []Arg) Response {
+	var count int
+	if (len(args) < 3) || (len(args[1:])%2 != 0) {
+		return ErrResponse(fmt.Errorf("invalid arg count %d", len(args)))
+	}
+	err := r.db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists(args[0])
+		if err != nil {
+			return err
+		}
+		for i := 1; i < len(args); i += 2 {
+			if err := b.Put(args[i], args[i+1]); err != nil {
+				return err
+			}
+			count++
+		}
+		return nil
+	})
+	if err != nil {
+		ErrResponse(err)
+	}
+	c := fmt.Sprintf("%d", count)
+	return Response{
+		rtype:   Integers,
+		content: []byte(c),
+	}
+}
+
+func (r *repo) Del(args []Arg) Response {
+	var count int
+	err := r.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(defaultBucket)
+
+		for _, a := range args {
+			if b.Get(a) == nil {
+				continue
+			}
+			if err := b.Delete(a); err != nil {
+				return err
+			}
+			count++
+		}
+		return nil
+	})
+	if err != nil {
+		ErrResponse(err)
+	}
+	c := fmt.Sprintf("%d", count)
+	return Response{
+		rtype:   Integers,
+		content: []byte(c),
+	}
 }

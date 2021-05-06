@@ -30,8 +30,12 @@ func (client *Client) Read() {
 				}.Encode()
 			case "set":
 				client.outgoing <- client.repo.Set(req.args).Encode()
+			case "hset":
+				client.outgoing <- client.repo.HSet(req.args).Encode()
 			case "get":
 				client.outgoing <- client.repo.Get(req.args).Encode()
+			case "del":
+				client.outgoing <- client.repo.Del(req.args).Encode()
 			default:
 				err := fmt.Errorf("unknown command '%s'", req.command)
 				client.outgoing <- ErrResponse(err).Encode()

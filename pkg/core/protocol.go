@@ -36,6 +36,8 @@ func (res Response) Encode() []byte {
 		buf.WriteString(length)
 		buf.Write(TerminationSeq)
 		buf.Write(res.content)
+	case Integers:
+		buf.Write(res.content)
 	case Errors:
 		buf.Write(res.content)
 	}
