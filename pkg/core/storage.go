@@ -138,6 +138,7 @@ func (r *repo) HGetAll(args []Arg) ResponseArray {
 }
 
 func (r *repo) HExists(args []Arg) Response {
+
 	var b []byte
 	r.db.View(func(tx *bolt.Tx) error {
 		b = tx.Bucket(args[0]).Get(args[1])

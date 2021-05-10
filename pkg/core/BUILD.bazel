@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "core",
+    srcs = [
+        "client.go",
+        "protocol.go",
+        "storage.go",
+    ],
+    importpath = "github.com/holmes89/chickaree-db/pkg/core",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_boltdb_bolt//:bolt",
+            "//pkg/proto"],
+)
+
+go_test(
+    name = "core_test",
+    srcs = ["protocol_test.go"],
+    embed = [":core"],
+)
