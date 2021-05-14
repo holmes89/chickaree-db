@@ -3,18 +3,21 @@ syntax = "proto3";
 package client.v1;
 option go_package = "github.com/holmes89/chickaree-db/pkg/proto";
 
-message Request {
-    uint32 msgCount = 1;
-    repeated bytes args= 2;
-    string command = 3;
+message EntryKey {
+    bytes key = 1;
 }
 
-message SubscriptionRequest {}
-message RepoEventLog{
-    Request request = 1;
+message Entry {
+    bytes key = 1;
+    bytes value= 2;
+    string type = 3;
+    repeated bytes args = 4;
 }
 
+message GetAllRequest {}
 
-service Replicator {
-    rpc Subscribe(SubscriptionRequest) returns (stream RepoEventLog) {}
+service ChickareeDB {
+    rpc Get(EntryKey) returns (Entry) {}
+    rpc GetAll(GetAllRequest) returns (stream Entry) {}
+    rpc Add(Entry) returns (Entry){}
 }

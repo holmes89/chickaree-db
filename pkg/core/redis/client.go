@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"net"
-	"strings"
 )
 
 type Client struct {
@@ -20,32 +19,7 @@ func (client *Client) Read() {
 	for {
 		req, err := NewRequest(client.reader)
 		if err == nil {
-			switch strings.ToLower(req.command) {
-			case "command":
-				client.outgoing <- OkResp.Encode()
-			case "ping":
-				client.outgoing <- Response{
-					rtype:   SimpleString,
-					content: []byte("PONG"),
-				}.Encode()
-			case "set":
-				client.outgoing <- client.repo.Set(req.args).Encode()
-			case "hset":
-				client.outgoing <- client.repo.HSet(req.args).Encode()
-			case "hget":
-				client.outgoing <- client.repo.HGet(req.args).Encode()
-			case "hexists":
-				client.outgoing <- client.repo.HExists(req.args).Encode()
-			case "hgetall":
-				client.outgoing <- client.repo.HGetAll(req.args).Encode()
-			case "get":
-				client.outgoing <- client.repo.Get(req.args).Encode()
-			case "del":
-				client.outgoing <- client.repo.Del(req.args).Encode()
-			default:
-				err := fmt.Errorf("unknown command '%s'", req.command)
-				client.outgoing <- ErrResponse(err).Encode()
-			}
+			client.outgoing <- client.repo.Handle(req)
 		} else {
 			break
 		}

@@ -14,14 +14,19 @@ type tcpServer struct {
 	errch    chan error
 }
 
-func NewTCPServer(port string, repo core.Repository) net.Listener {
+func NewTCPServer(port string, repo core.Repository) Runner {
+
 	listener, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("listening on port %s\n", port)
 
-	return listener
+	return &tcpServer{
+		listener: listener,
+		repo:     repo,
+		errch:    make(chan error),
+	}
 }
 
 func (s *tcpServer) Run() <-chan error {

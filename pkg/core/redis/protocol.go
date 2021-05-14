@@ -7,9 +7,17 @@ import (
 )
 
 type Request struct {
-	msgCount int
-	args     []Arg
-	command  string
+	MsgCount int
+	Args     []Arg
+	Command  string
+}
+
+func NewRequestMsg(msgCount int, args []Arg, command string) Request {
+	return Request{
+		MsgCount: msgCount,
+		Args:     args,
+		Command:  command,
+	}
 }
 
 type Response struct {
@@ -97,11 +105,11 @@ func ErrResponse(err error) Response {
 
 func NewRequest(r io.Reader) (req Request, err error) {
 
-	req.msgCount, err = getSize(r)
+	req.MsgCount, err = getSize(r)
 	if err != nil {
 		return req, err
 	}
-	for i := req.msgCount; i > 0; i-- {
+	for i := req.MsgCount; i > 0; i-- {
 		bufsize, err := getSize(r)
 		if err != nil {
 			return req, err
@@ -116,10 +124,10 @@ func NewRequest(r io.Reader) (req Request, err error) {
 		if c != int(bufsize) {
 			return req, io.EOF
 		}
-		req.args = append(req.args, b[:len(b)-2])
+		req.Args = append(req.Args, b[:len(b)-2])
 	}
-	req.command = string(req.args[0])
-	req.args = req.args[1:]
+	req.Command = string(req.Args[0])
+	req.Args = req.Args[1:]
 
 	return req, nil
 }

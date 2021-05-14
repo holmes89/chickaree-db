@@ -20,4 +20,7 @@ func main() {
 	tcpServer := server.NewTCPServer(port, repo)
 	defer tcpServer.Close()
 
+	grpcServer := server.NewGRPCServer(repo)
+	defer grpcServer.GracefulStop()
+
 }

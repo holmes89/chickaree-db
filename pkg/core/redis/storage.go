@@ -3,12 +3,14 @@ package core
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/boltdb/bolt"
 )
 
 type Arg []byte
 type Repository interface {
+	Handle(Request) []byte
 	Set(key []Arg) Response
 	Get(key []Arg) Response
 	Del(key []Arg) Response
@@ -41,6 +43,35 @@ func NewRepo(f string) Repository {
 
 func (r *repo) Close() error {
 	return r.db.Close()
+}
+
+func (r *repo) Handle(req Request) []byte {
+	switch strings.ToLower(req.Command) {
+	case "command":
+		return OkResp.Encode()
+	case "ping":
+		return Response{
+			rtype:   SimpleString,
+			content: []byte("PONG"),
+		}.Encode()
+	case "set":
+		return r.Set(req.Args).Encode()
+	case "hset":
+		return r.HSet(req.Args).Encode()
+	case "hget":
+		return r.HGet(req.Args).Encode()
+	case "hexists":
+		return r.HExists(req.Args).Encode()
+	case "hgetall":
+		return r.HGetAll(req.Args).Encode()
+	case "get":
+		return r.Get(req.Args).Encode()
+	case "del":
+		return r.Del(req.Args).Encode()
+	default:
+		err := fmt.Errorf("unknown command '%s'", req.Command)
+		return ErrResponse(err).Encode()
+	}
 }
 
 func (r *repo) Set(args []Arg) Response {
