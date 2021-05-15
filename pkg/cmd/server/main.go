@@ -2,9 +2,10 @@ package main
 
 import (
 	"flag"
+	"log"
 
-	"github.com/holmes89/chickaree-db/bazel-chickaree-db/pkg/server"
 	"github.com/holmes89/chickaree-db/pkg/core"
+	"github.com/holmes89/chickaree-db/pkg/server"
 )
 
 func main() {
@@ -20,7 +21,8 @@ func main() {
 	tcpServer := server.NewTCPServer(port, repo)
 	defer tcpServer.Close()
 
-	grpcServer := server.NewGRPCServer(repo)
-	defer grpcServer.GracefulStop()
+	log.Println(<-tcpServer.Run())
+	// grpcServer := server.NewGRPCServer(repo)
+	// defer grpcServer.GracefulStop()
 
 }

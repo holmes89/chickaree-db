@@ -1,51 +1,13 @@
-package core
+package redis
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
-	"github.com/boltdb/bolt"
+	"github.com/holmes89/chickaree-db/pkg/core"
 )
 
-type Arg []byte
-type Repository interface {
-	Handle(Request) []byte
-	Set(key []Arg) Response
-	Get(key []Arg) Response
-	Del(key []Arg) Response
-	HSet(key []Arg) Response
-	HGet(key []Arg) Response
-	HGetAll(key []Arg) ResponseArray
-	HExists(key []Arg) Response
-	Close() error
-}
-
-type repo struct {
-	db *bolt.DB
-}
-
-var defaultBucket = []byte{0x0}
-
-func NewRepo(f string) Repository {
-	db, err := bolt.Open(f, 0600, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists(defaultBucket)
-		return err
-	})
-	return &repo{
-		db: db,
-	}
-}
-
-func (r *repo) Close() error {
-	return r.db.Close()
-}
-
-func (r *repo) Handle(req Request) []byte {
+func (c *Client) Handle(req Request) []byte {
 	switch strings.ToLower(req.Command) {
 	case "command":
 		return OkResp.Encode()
@@ -55,159 +17,169 @@ func (r *repo) Handle(req Request) []byte {
 			content: []byte("PONG"),
 		}.Encode()
 	case "set":
-		return r.Set(req.Args).Encode()
+		return c.set(req.Args).Encode()
 	case "hset":
-		return r.HSet(req.Args).Encode()
+		return c.hSet(req.Args).Encode()
 	case "hget":
-		return r.HGet(req.Args).Encode()
+		return c.hGet(req.Args).Encode()
 	case "hexists":
-		return r.HExists(req.Args).Encode()
+		return c.hExists(req.Args).Encode()
 	case "hgetall":
-		return r.HGetAll(req.Args).Encode()
+		return c.hGetAll(req.Args).Encode()
 	case "get":
-		return r.Get(req.Args).Encode()
+		return c.get(req.Args).Encode()
 	case "del":
-		return r.Del(req.Args).Encode()
+		return c.del(req.Args).Encode()
 	default:
 		err := fmt.Errorf("unknown command '%s'", req.Command)
 		return ErrResponse(err).Encode()
 	}
 }
 
-func (r *repo) Set(args []Arg) Response {
-	err := r.db.Update(func(tx *bolt.Tx) error {
-		return tx.Bucket(defaultBucket).Put(args[0], args[1])
-	})
+func (c *Client) set(args []Arg) Response {
+	entry := core.Entry{
+		Type:  "primative",
+		Key:   args[0],
+		Value: args[1],
+	}
+	err := c.repo.Set(entry)
 	if err != nil {
 		return ErrResponse(err)
 	}
 	return OkResp
 }
 
-func (r *repo) Get(args []Arg) Response {
-	var b []byte
-	r.db.View(func(tx *bolt.Tx) error {
-		b = tx.Bucket(defaultBucket).Get(args[0])
-		return nil
-	})
-	if len(b) == 0 {
+func (c *Client) get(args []Arg) Response {
+
+	r, err := c.repo.Get(args[0])
+
+	if err == core.ErrNotFound {
 		return NilStringResp
 	}
-	res := Response{
-		rtype:   BulkStrings,
-		content: b,
-		length:  len(b),
-	}
-	return res
-}
 
-func (r *repo) HSet(args []Arg) Response {
-	var count int
-	if (len(args) < 3) || (len(args[1:])%2 != 0) {
-		return ErrResponse(fmt.Errorf("invalid arg count %d", len(args)))
-	}
-	err := r.db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists(args[0])
-		if err != nil {
-			return err
-		}
-		for i := 1; i < len(args); i += 2 {
-			if err := b.Put(args[i], args[i+1]); err != nil {
-				return err
-			}
-			count++
-		}
-		return nil
-	})
 	if err != nil {
-		ErrResponse(err)
-	}
-	c := fmt.Sprintf("%d", count)
-	return Response{
-		rtype:   Integers,
-		content: []byte(c),
-	}
-}
-
-func (r *repo) HGet(args []Arg) Response {
-	var b []byte
-	r.db.View(func(tx *bolt.Tx) error {
-		b = tx.Bucket(args[0]).Get(args[1])
-		return nil
-	})
-	if len(b) == 0 {
-		return NilStringResp
+		return ErrResponse(err)
 	}
 	res := Response{
 		rtype:   BulkStrings,
-		content: b,
-		length:  len(b),
+		content: r.Value,
+		length:  len(r.Value),
 	}
 	return res
+}
+
+func (c *Client) hSet(args []Arg) Response {
+	// var count int
+	// if (len(args) < 3) || (len(args[1:])%2 != 0) {
+	// 	return ErrResponse(fmt.Errorf("invalid arg count %d", len(args)))
+	// }
+	// err := r.db.Update(func(tx *bolt.Tx) error {
+	// 	b, err := tx.CreateBucketIfNotExists(args[0])
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	for i := 1; i < len(args); i += 2 {
+	// 		if err := b.Put(args[i], args[i+1]); err != nil {
+	// 			return err
+	// 		}
+	// 		count++
+	// 	}
+	// 	return nil
+	// })
+	// if err != nil {
+	// 	ErrResponse(err)
+	// }
+	// c := fmt.Sprintf("%d", count)
+	// return Response{
+	// 	rtype:   Integers,
+	// 	content: []byte(c),
+	// }
+	return OkResp
+}
+
+func (c *Client) hGet(args []Arg) Response {
+	// var b []byte
+	// r.db.View(func(tx *bolt.Tx) error {
+	// 	b = tx.Bucket(args[0]).Get(args[1])
+	// 	return nil
+	// })
+	// if len(b) == 0 {
+	// 	return NilStringResp
+	// }
+	// res := Response{
+	// 	rtype:   BulkStrings,
+	// 	content: b,
+	// 	length:  len(b),
+	// }
+	// return res
+	return OkResp
 }
 
 // TODO maybe need to store types along with value
-func (r *repo) HGetAll(args []Arg) ResponseArray {
-	var res ResponseArray
-	r.db.View(func(tx *bolt.Tx) error {
-		return tx.Bucket(args[0]).ForEach(func(k, v []byte) error {
-			res = append(res, Response{
-				rtype:   BulkStrings,
-				content: k,
-				length:  len(k),
-			})
-			res = append(res, Response{
-				rtype:   BulkStrings,
-				content: v,
-				length:  len(v),
-			})
-			return nil
-		})
-	})
+func (c *Client) hGetAll(args []Arg) ResponseArray {
+	// var res ResponseArray
+	// r.db.View(func(tx *bolt.Tx) error {
+	// 	return tx.Bucket(args[0]).ForEach(func(k, v []byte) error {
+	// 		res = append(res, Response{
+	// 			rtype:   BulkStrings,
+	// 			content: k,
+	// 			length:  len(k),
+	// 		})
+	// 		res = append(res, Response{
+	// 			rtype:   BulkStrings,
+	// 			content: v,
+	// 			length:  len(v),
+	// 		})
+	// 		return nil
+	// 	})
+	// })
 
-	return res
+	return nil
+
 }
 
-func (r *repo) HExists(args []Arg) Response {
+func (c *Client) hExists(args []Arg) Response {
 
-	var b []byte
-	r.db.View(func(tx *bolt.Tx) error {
-		b = tx.Bucket(args[0]).Get(args[1])
-		return nil
-	})
-	count := "1"
-	if len(b) == 0 {
-		count = "0"
-	}
-	res := Response{
-		rtype:   Integers,
-		content: []byte(count),
-	}
-	return res
+	// var b []byte
+	// r.db.View(func(tx *bolt.Tx) error {
+	// 	b = tx.Bucket(args[0]).Get(args[1])
+	// 	return nil
+	// })
+	// count := "1"
+	// if len(b) == 0 {
+	// 	count = "0"
+	// }
+	// res := Response{
+	// 	rtype:   Integers,
+	// 	content: []byte(count),
+	// }
+	// return res
+	return OkResp
 }
 
-func (r *repo) Del(args []Arg) Response {
-	var count int
-	err := r.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket(defaultBucket)
+func (c *Client) del(args []Arg) Response {
+	// var count int
+	// err := r.db.Update(func(tx *bolt.Tx) error {
+	// 	b := tx.Bucket(defaultBucket)
 
-		for _, a := range args {
-			if b.Get(a) == nil {
-				continue
-			}
-			if err := b.Delete(a); err != nil {
-				return err
-			}
-			count++
-		}
-		return nil
-	})
-	if err != nil {
-		ErrResponse(err)
-	}
-	c := fmt.Sprintf("%d", count)
-	return Response{
-		rtype:   Integers,
-		content: []byte(c),
-	}
+	// 	for _, a := range args {
+	// 		if b.Get(a) == nil {
+	// 			continue
+	// 		}
+	// 		if err := b.Delete(a); err != nil {
+	// 			return err
+	// 		}
+	// 		count++
+	// 	}
+	// 	return nil
+	// })
+	// if err != nil {
+	// 	ErrResponse(err)
+	// }
+	// c := fmt.Sprintf("%d", count)
+	// return Response{
+	// 	rtype:   Integers,
+	// 	content: []byte(c),
+	// }
+	return OkResp
 }

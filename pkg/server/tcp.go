@@ -6,6 +6,7 @@ import (
 	"net"
 
 	"github.com/holmes89/chickaree-db/pkg/core"
+	"github.com/holmes89/chickaree-db/pkg/core/redis"
 )
 
 type tcpServer struct {
@@ -16,16 +17,21 @@ type tcpServer struct {
 
 func NewTCPServer(port string, repo core.Repository) Runner {
 
+	if port[0] != ':' {
+		port = ":" + port
+	}
+
 	listener, err := net.Listen("tcp", port)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("listening on port %s\n", port)
 
+	errch := make(chan error)
 	return &tcpServer{
 		listener: listener,
 		repo:     repo,
-		errch:    make(chan error),
+		errch:    errch,
 	}
 }
 
@@ -36,7 +42,7 @@ func (s *tcpServer) Run() <-chan error {
 			if err != nil {
 				s.errch <- err
 			}
-			_ = core.NewClient(conn, s.repo)
+			_ = redis.NewClient(conn, s.repo)
 			fmt.Println("client connected")
 		}
 	}()
@@ -44,6 +50,7 @@ func (s *tcpServer) Run() <-chan error {
 }
 
 func (s *tcpServer) Close() error {
+	log.Println("closing server...")
 	close(s.errch)
 	return s.listener.Close()
 }

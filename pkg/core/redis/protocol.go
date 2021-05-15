@@ -1,4 +1,4 @@
-package core
+package redis
 
 import (
 	"bytes"
@@ -6,6 +6,7 @@ import (
 	"strconv"
 )
 
+type Arg []byte
 type Request struct {
 	MsgCount int
 	Args     []Arg

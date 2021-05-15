@@ -1,9 +1,11 @@
-package core
+package redis
 
 import (
 	"bufio"
 	"fmt"
 	"net"
+
+	"github.com/holmes89/chickaree-db/pkg/core"
 )
 
 type Client struct {
@@ -12,14 +14,14 @@ type Client struct {
 	reader   *bufio.Reader
 	writer   *bufio.Writer
 	conn     net.Conn
-	repo     Repository
+	repo     core.Repository
 }
 
 func (client *Client) Read() {
 	for {
 		req, err := NewRequest(client.reader)
 		if err == nil {
-			client.outgoing <- client.repo.Handle(req)
+			client.outgoing <- client.Handle(req)
 		} else {
 			break
 		}
@@ -43,7 +45,7 @@ func (client *Client) Listen() {
 	go client.Write()
 }
 
-func NewClient(connection net.Conn, repo Repository) *Client {
+func NewClient(connection net.Conn, repo core.Repository) *Client {
 	if connection == nil {
 		panic("no connection")
 	}
