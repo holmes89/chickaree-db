@@ -22,11 +22,11 @@ type Entry struct {
 type EntryType byte
 
 const (
-	unknownEntry   EntryType = 0
-	primativeEntry EntryType = 1
-	mapEntry       EntryType = 2
-	arrayEntry     EntryType = 3
-	setEntry       EntryType = 4
+	unknownEntry EntryType = iota
+	primativeEntry
+	mapEntry
+	arrayEntry
+	setEntry
 )
 
 func encodeEntry(e Entry) []byte {
