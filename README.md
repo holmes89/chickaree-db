@@ -1,5 +1,5 @@
 # Chickaree Database
-<div style="text-align:center"><img src="./chickree-raft.jpg" /></div>
+<p align="center"><img src="./chickree-raft.jpg" /></p>
 Redis like database using Raft for replication. 
 
 Named after [American Red squirrel](https://en.wikipedia.org/wiki/American_red_squirrel).
