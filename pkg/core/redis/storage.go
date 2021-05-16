@@ -69,31 +69,31 @@ func (c *Client) get(args []Arg) Response {
 }
 
 func (c *Client) hSet(args []Arg) Response {
-	// var count int
-	// if (len(args) < 3) || (len(args[1:])%2 != 0) {
-	// 	return ErrResponse(fmt.Errorf("invalid arg count %d", len(args)))
-	// }
-	// err := r.db.Update(func(tx *bolt.Tx) error {
-	// 	b, err := tx.CreateBucketIfNotExists(args[0])
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	for i := 1; i < len(args); i += 2 {
-	// 		if err := b.Put(args[i], args[i+1]); err != nil {
-	// 			return err
-	// 		}
-	// 		count++
-	// 	}
-	// 	return nil
-	// })
-	// if err != nil {
-	// 	ErrResponse(err)
-	// }
-	// c := fmt.Sprintf("%d", count)
-	// return Response{
-	// 	rtype:   Integers,
-	// 	content: []byte(c),
-	// }
+	var count int
+
+	if (len(args) < 3) || (len(args[1:])%2 != 0) {
+		return ErrResponse(fmt.Errorf("invalid arg count %d", len(args)))
+	}
+
+	e := core.Entry{
+		Type: "map",
+		Key:  args[0],
+	}
+	for i := 1; i < len(args); i += 2 {
+
+		if err := b.Put(args[i], args[i+1]); err != nil {
+			return err
+		}
+		count++
+	}
+	if err != nil {
+		ErrResponse(err)
+	}
+	c := fmt.Sprintf("%d", count)
+	return Response{
+		rtype:   Integers,
+		content: []byte(c),
+	}
 	return OkResp
 }
 
