@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package client.v1;
+option go_package = "./chickaree";
+
+message GetRequest {
+    string key = 1;
+}
+
+message GetResponse {
+    bytes data = 1;
+}
+
+message SetRequest {
+    string key = 1;
+    bytes value = 2;
+}
+
+message SetResponse{}
+
+service ChickareeDB {
+    rpc Get(GetRequest) returns (GetResponse) {}
+    rpc Set(SetRequest) returns (SetResponse){}
+}

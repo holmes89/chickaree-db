@@ -4,8 +4,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/holmes89/chickaree-db/pkg/core"
-	"github.com/holmes89/chickaree-db/pkg/server"
+	"github.com/holmes89/chickaree-db/pkg/core/redis"
 )
 
 func main() {
@@ -15,10 +14,7 @@ func main() {
 
 	flag.Parse()
 
-	repo := core.NewRepo("chickaree.db")
-	defer repo.Close()
-
-	tcpServer := server.NewTCPServer(port, repo)
+	tcpServer := redis.NewTCPServer(port)
 	defer tcpServer.Close()
 
 	log.Println(<-tcpServer.Run())

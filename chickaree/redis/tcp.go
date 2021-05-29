@@ -1,21 +1,17 @@
-package server
+package redis
 
 import (
 	"fmt"
 	"log"
 	"net"
-
-	"github.com/holmes89/chickaree-db/pkg/core"
-	"github.com/holmes89/chickaree-db/pkg/core/redis"
 )
 
-type tcpServer struct {
+type TcpServer struct {
 	listener net.Listener
-	repo     core.Repository
 	errch    chan error
 }
 
-func NewTCPServer(port string, repo core.Repository) Runner {
+func NewTCPServer(port string) *TcpServer {
 
 	if port[0] != ':' {
 		port = ":" + port
@@ -28,28 +24,27 @@ func NewTCPServer(port string, repo core.Repository) Runner {
 	fmt.Printf("listening on port %s\n", port)
 
 	errch := make(chan error)
-	return &tcpServer{
+	return &TcpServer{
 		listener: listener,
-		repo:     repo,
 		errch:    errch,
 	}
 }
 
-func (s *tcpServer) Run() <-chan error {
+func (s *TcpServer) Run() <-chan error {
 	go func() {
 		for {
 			conn, err := s.listener.Accept()
 			if err != nil {
 				s.errch <- err
 			}
-			_ = redis.NewClient(conn, s.repo)
+			_ = NewClient(conn)
 			fmt.Println("client connected")
 		}
 	}()
 	return s.errch
 }
 
-func (s *tcpServer) Close() error {
+func (s *TcpServer) Close() error {
 	log.Println("closing server...")
 	close(s.errch)
 	return s.listener.Close()

@@ -1,11 +1,68 @@
 package redis
 
 import (
+	"bufio"
 	"fmt"
+	"net"
 	"strings"
 
-	"github.com/holmes89/chickaree-db/pkg/core"
+	"github.com/holmes89/chickaree-db/chickaree"
 )
+
+type Client struct {
+	// incoming chan string
+	outgoing chan []byte
+	reader   *bufio.Reader
+	writer   *bufio.Writer
+	conn     net.Conn
+	repo     chickaree.ChickareeDBClient
+}
+
+func (client *Client) Read() {
+	for {
+		req, err := NewRequest(client.reader)
+		if err == nil {
+			client.outgoing <- client.Handle(req)
+		} else {
+			break
+		}
+
+	}
+
+	client.conn.Close()
+	fmt.Println("client disconnected")
+	client = nil
+}
+
+func (client *Client) Write() {
+	for data := range client.outgoing {
+		client.writer.Write(data)
+		client.writer.Flush()
+	}
+}
+
+func (client *Client) Listen() {
+	go client.Read()
+	go client.Write()
+}
+
+func NewClient(connection net.Conn) *Client {
+	if connection == nil {
+		panic("no connection")
+	}
+	writer := bufio.NewWriter(connection)
+	reader := bufio.NewReader(connection)
+
+	client := &Client{
+		outgoing: make(chan []byte),
+		conn:     connection,
+		reader:   reader,
+		writer:   writer,
+	}
+	client.Listen()
+
+	return client
+}
 
 func (c *Client) Handle(req Request) []byte {
 	switch strings.ToLower(req.Command) {
@@ -37,63 +94,17 @@ func (c *Client) Handle(req Request) []byte {
 }
 
 func (c *Client) set(args []Arg) Response {
-	entry := core.Entry{
-		Type:  "primative",
-		Key:   args[0],
-		Value: args[1],
-	}
-	err := c.repo.Set(entry)
-	if err != nil {
-		return ErrResponse(err)
-	}
+
 	return OkResp
 }
 
 func (c *Client) get(args []Arg) Response {
 
-	r, err := c.repo.Get(args[0])
-
-	if err == core.ErrNotFound {
-		return NilStringResp
-	}
-
-	if err != nil {
-		return ErrResponse(err)
-	}
-	res := Response{
-		rtype:   BulkStrings,
-		content: r.Value,
-		length:  len(r.Value),
-	}
-	return res
+	return OkResp
 }
 
 func (c *Client) hSet(args []Arg) Response {
-	var count int
 
-	if (len(args) < 3) || (len(args[1:])%2 != 0) {
-		return ErrResponse(fmt.Errorf("invalid arg count %d", len(args)))
-	}
-
-	e := core.Entry{
-		Type: "map",
-		Key:  args[0],
-	}
-	for i := 1; i < len(args); i += 2 {
-
-		if err := b.Put(args[i], args[i+1]); err != nil {
-			return err
-		}
-		count++
-	}
-	if err != nil {
-		ErrResponse(err)
-	}
-	c := fmt.Sprintf("%d", count)
-	return Response{
-		rtype:   Integers,
-		content: []byte(c),
-	}
 	return OkResp
 }
 
