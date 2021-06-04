@@ -2,6 +2,7 @@ package redis
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -94,7 +95,11 @@ func (c *Client) Handle(req Request) []byte {
 }
 
 func (c *Client) set(args []Arg) Response {
-
+	ctx := context.TODO()
+	req := chickaree.SetRequest{
+		Key:   args[0],
+		Value: nil,
+	}
 	return OkResp
 }
 
