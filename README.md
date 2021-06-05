@@ -13,3 +13,4 @@ https://redis.io/topics/protocol
 
 - [ ] Storage right now assumes string, should handle storage type.
 - [ ] Security between services
+- [ ] Logging and telemetry

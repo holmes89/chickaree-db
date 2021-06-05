@@ -16,29 +16,28 @@ type Client struct {
 	reader   *bufio.Reader
 	writer   *bufio.Writer
 	conn     net.Conn
-	repo     chickaree.ChickareeDBClient
+	client   chickaree.ChickareeDBClient
 }
 
-func (client *Client) Read() {
+func (c *Client) Read() {
 	for {
-		req, err := NewRequest(client.reader)
+		req, err := NewRequest(c.reader)
 		if err == nil {
-			client.outgoing <- client.Handle(req)
+			c.outgoing <- c.Handle(req)
 		} else {
 			break
 		}
 
 	}
 
-	client.conn.Close()
+	c.conn.Close()
 	fmt.Println("client disconnected")
-	client = nil
 }
 
-func (client *Client) Write() {
-	for data := range client.outgoing {
-		client.writer.Write(data)
-		client.writer.Flush()
+func (c *Client) Write() {
+	for data := range c.outgoing {
+		c.writer.Write(data)
+		c.writer.Flush()
 	}
 }
 
@@ -47,7 +46,7 @@ func (client *Client) Listen() {
 	go client.Write()
 }
 
-func NewClient(connection net.Conn) *Client {
+func NewClient(connection net.Conn, cl chickaree.ChickareeDBClient) *Client {
 	if connection == nil {
 		panic("no connection")
 	}
@@ -59,6 +58,7 @@ func NewClient(connection net.Conn) *Client {
 		conn:     connection,
 		reader:   reader,
 		writer:   writer,
+		client:   cl,
 	}
 	client.Listen()
 
@@ -96,16 +96,36 @@ func (c *Client) Handle(req Request) []byte {
 
 func (c *Client) set(args []Arg) Response {
 	ctx := context.TODO()
-	req := chickaree.SetRequest{
-		Key:   args[0],
-		Value: nil,
+	req := &chickaree.SetRequest{
+		Key:   string(args[0]),
+		Value: args[1],
+	}
+	_, err := c.client.Set(ctx, req)
+	if err != nil {
+		ErrResponse(err)
 	}
 	return OkResp
 }
 
 func (c *Client) get(args []Arg) Response {
+	ctx := context.TODO()
+	req := &chickaree.GetRequest{
+		Key: string(args[0]),
+	}
+	resp, err := c.client.Get(ctx, req)
+	if err != nil {
+		ErrResponse(err)
+	}
 
-	return OkResp
+	if len(resp.Data) == 0 {
+		return NilStringResp
+	}
+
+	return Response{
+		rtype:   BulkStrings,
+		length:  len(resp.Data),
+		content: resp.Data,
+	}
 }
 
 func (c *Client) hSet(args []Arg) Response {

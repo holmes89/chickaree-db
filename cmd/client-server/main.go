@@ -4,7 +4,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/holmes89/chickaree-db/pkg/core/redis"
+	"github.com/holmes89/chickaree-db/chickaree/redis"
 )
 
 func main() {

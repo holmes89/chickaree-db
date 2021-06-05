@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"log"
 	"net"
+
+	"github.com/holmes89/chickaree-db/chickaree"
 )
 
 type TcpServer struct {
 	listener net.Listener
+	client   chickaree.ChickareeDBClient
 	errch    chan error
 }
 
@@ -37,7 +40,7 @@ func (s *TcpServer) Run() <-chan error {
 			if err != nil {
 				s.errch <- err
 			}
-			_ = NewClient(conn)
+			_ = NewClient(conn, s.client)
 			fmt.Println("client connected")
 		}
 	}()
