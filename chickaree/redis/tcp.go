@@ -14,7 +14,7 @@ type TcpServer struct {
 	errch    chan error
 }
 
-func NewTCPServer(port string) *TcpServer {
+func NewTCPServer(port string, client chickaree.ChickareeDBClient) *TcpServer {
 
 	if port[0] != ':' {
 		port = ":" + port
@@ -30,6 +30,7 @@ func NewTCPServer(port string) *TcpServer {
 	return &TcpServer{
 		listener: listener,
 		errch:    errch,
+		client:   client,
 	}
 }
 
