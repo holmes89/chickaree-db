@@ -1,6 +1,8 @@
 package storage
 
-import bolt "go.etcd.io/bbolt"
+import (
+	bolt "go.etcd.io/bbolt"
+)
 
 type storage interface {
 	Set(key, value []byte) error
@@ -11,7 +13,8 @@ type storage interface {
 var defaultBucket = []byte{0x0}
 
 type store struct {
-	db *bolt.DB
+	db   *bolt.DB
+	path string
 }
 
 func newStorage(path string) (storage, error) {
@@ -28,7 +31,8 @@ func newStorage(path string) (storage, error) {
 	}
 
 	return &store{
-		db: db,
+		path: path,
+		db:   db,
 	}, nil
 }
 

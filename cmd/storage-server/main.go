@@ -21,11 +21,11 @@ func main() {
 	}
 	gsrv := grpc.NewServer()
 
-	srv, cl, err := storage.NewServer(&storage.Config{})
+	srv, err := storage.NewServer(&storage.Config{})
 	if err != nil {
 		log.Panic(err)
 	}
-	defer cl.Close()
+	defer srv.Close()
 	chickaree.RegisterChickareeDBServer(gsrv, srv)
 
 	errs := make(chan error, 2) // This is used to handle and log the reason why the application quit.

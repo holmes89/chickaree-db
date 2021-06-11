@@ -3,6 +3,25 @@ syntax = "proto3";
 package client.v1;
 option go_package = "./chickaree";
 
+message GetServersRequest{}
+
+message GetServersResponse{
+    repeated Server servers = 1;
+}
+
+message Server {
+    string id = 1;
+    string rpc_addr = 2;
+    bool is_leader = 3;
+}
+
+message EventLogRequest {}
+
+message EventLogResponse {
+    bytes command = 1;
+    repeated bytes args = 2;
+}
+
 message GetRequest {
     string key = 1;
 }
@@ -19,6 +38,8 @@ message SetRequest {
 message SetResponse{}
 
 service ChickareeDB {
+    rpc GetServers(GetServersRequest) returns (GetServersResponse) {}
+    rpc EventLog(EventLogRequest) returns (stream EventLogResponse) {}
     rpc Get(GetRequest) returns (GetResponse) {}
     rpc Set(SetRequest) returns (SetResponse){}
 }
