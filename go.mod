@@ -3,6 +3,8 @@ module github.com/holmes89/chickaree-db
 go 1.15
 
 require (
+	github.com/hashicorp/raft v1.3.1 // indirect
+	github.com/hashicorp/raft-boltdb v0.0.0-20210422161416-485fa74b0b01 // indirect
 	github.com/hashicorp/serf v0.9.5
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/net v0.0.0-20210525063256-abc453219eb5 // indirect

@@ -1,43 +1,99 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"sync"
+	"time"
 
+	"github.com/hashicorp/raft"
 	"github.com/holmes89/chickaree-db/chickaree"
 	"github.com/holmes89/chickaree-db/chickaree/discovery"
+	"google.golang.org/protobuf/proto"
 )
 
 type Config struct {
+	StoragePath string
+	RaftDir     string
+	Raft        struct {
+		raft.Config
+		BindAddr    string
+		StreamLayer *StreamLayer
+		Bootstrap   bool
+	}
 }
 
 type Server struct {
 	chickaree.UnimplementedChickareeDBServer
-	*Config
-	store      storage
-	events     *eventLogger
+	Config
+	store      *eventLogger
 	membership *discovery.Membership // Refactor to extract replication logic.
 
-	replicator *Replicator
+	replicator       *Replicator
+	raft             *raft.Raft
+	raftNetTransport *raft.NetworkTransport
 
-	mu      sync.Mutex
-	servers map[string]chan struct{}
-	closed  bool
-	close   chan struct{}
+	closeLock sync.Mutex
+	servers   map[string]chan struct{}
+	closed    bool
+	close     chan struct{}
 }
 
-func NewServer(config *Config) (*Server, error) {
-	store, err := newStorage("chickaree.db")
+func NewServer(config Config) (*Server, error) {
+	store, err := NewEventLogger(config)
 	if err != nil {
 		return nil, err
 	}
 	s := &Server{
 		Config: config,
-		events: NewEventLogger(),
 		store:  store,
 	}
 
 	return s, nil
+}
+func (s *Server) Close() error {
+	s.closeLock.Lock()
+	defer s.closeLock.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	close(s.close)
+	shutdown := []func() error{
+		s.membership.Leave,
+		s.replicator.Close,
+		s.store.Close,
+	}
+
+	for _, fn := range shutdown {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) encode(t RequestType, req proto.Message) error {
+	var buf bytes.Buffer
+	if err := buf.WriteByte(byte(t)); err != nil {
+		return err
+	}
+	b, err := proto.Marshal(req)
+	if err != nil {
+		return err
+	}
+	if _, err := buf.Write(b); err != nil {
+		return err
+	}
+	future := s.raft.Apply(buf.Bytes(), time.Second)
+	if future.Error() != nil {
+		return future.Error()
+	}
+	res := future.Response()
+	if err, ok := res.(error); ok {
+		return err
+	}
+	return nil
 }
 
 func (s *Server) setupMembership() (err error) {
@@ -66,20 +122,22 @@ func (s *Server) Get(ctx context.Context, req *chickaree.GetRequest) (*chickaree
 }
 
 func (s *Server) Set(ctx context.Context, req *chickaree.SetRequest) (*chickaree.SetResponse, error) {
+	if err := s.encode(Set, req); err != nil {
+		return nil, err
+	}
 	err := s.store.Set([]byte(req.Key), req.Value)
 	if err != nil {
 		return nil, err
 	}
-	go s.events.Write("set", [][]byte{req.Value})
 	return &chickaree.SetResponse{}, nil
 }
 
 func (s *Server) EventLog(req *chickaree.EventLogRequest, stream chickaree.ChickareeDB_EventLogServer) error {
-	evts, err := s.events.Events()
+	evts, err := s.store.Events()
 	if err != nil {
 		return err
 	}
-	defer s.events.Leave(evts)
+	defer s.store.Leave(evts)
 	for {
 		select {
 		case <-stream.Context().Done():
