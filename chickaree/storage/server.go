@@ -1,73 +1,80 @@
 package storage
 
 import (
-	"bytes"
 	"context"
-	"errors"
+	"crypto/tls"
+	"fmt"
+	"net"
 	"sync"
-	"time"
 
-	"github.com/hashicorp/raft"
 	"github.com/holmes89/chickaree-db/chickaree"
 	"github.com/holmes89/chickaree-db/chickaree/discovery"
-	"google.golang.org/protobuf/proto"
 )
 
-type Config struct {
-	StoragePath string
-	RaftDir     string
-	Raft        struct {
-		raft.Config
-		BindAddr    string
-		StreamLayer *StreamLayer
-		Bootstrap   bool
+type ServerConfig struct {
+	Config
+	ServerTLSConfig *tls.Config
+	PeerTLSConfig   *tls.Config
+	// DataDir stores the log and raft data.
+	DataDir string
+	// BindAddr is the address serf runs on.
+	BindAddr string
+	// RPCPort is the port for client (and Raft) connections.
+	RPCPort int
+	// Raft server id.
+	NodeName string
+	// Bootstrap should be set to true when starting the first node of the cluster.
+	StartJoinAddrs []string
+	ACLModelFile   string
+	ACLPolicyFile  string
+	Bootstrap      bool
+}
+
+func (c ServerConfig) RPCAddr() (string, error) {
+	host, _, err := net.SplitHostPort(c.BindAddr)
+	if err != nil {
+		return "", err
 	}
+	return fmt.Sprintf("%s:%d", host, c.RPCPort), nil
 }
 
 type Server struct {
 	chickaree.UnimplementedChickareeDBServer
-	Config
-	store      storage
+	ServerConfig
+	store      *DistributedStorage
 	membership *discovery.Membership
 
-	raft             *raft.Raft
-	raftNetTransport *raft.NetworkTransport
-
-	closeLock sync.Mutex
-	servers   map[string]chan struct{}
-	closed    bool
-	close     chan struct{}
+	shutdown     bool
+	shutdowns    chan struct{}
+	shutdownLock sync.Mutex
 }
 
-func NewServer(config Config) (*Server, error) {
+func NewServer(config ServerConfig) (*Server, error) {
 	store, err := newStorage(config.StoragePath)
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{
-		Config: config,
-		store:  store,
-	}
-
-	fsm := NewEventLogger(store)
-	r, trans, err := NewRaft(context.Background(), config, "test", "test", fsm)
+	distStore, err := NewDistributedStorage(store, config.Config)
 	if err != nil {
-		return s, errors.New("unable to register raft protocol")
+		return nil, err
+	}
+	s := &Server{
+		ServerConfig: config,
+		store:        distStore,
 	}
 
-	s.raft = r
-	s.raftNetTransport = trans
+	s.setupMembership()
 
 	return s, nil
 }
 func (s *Server) Close() error {
-	s.closeLock.Lock()
-	defer s.closeLock.Unlock()
-	if s.closed {
+	s.shutdownLock.Lock()
+	defer s.shutdownLock.Unlock()
+	if s.shutdown {
 		return nil
 	}
-	s.closed = true
-	close(s.close)
+	s.shutdown = true
+	close(s.shutdowns)
 	shutdown := []func() error{
 		s.membership.Leave,
 		s.store.Close,
@@ -81,37 +88,18 @@ func (s *Server) Close() error {
 	return nil
 }
 
-func (s *Server) encode(t RequestType, req proto.Message) error {
-	var buf bytes.Buffer
-	if err := buf.WriteByte(byte(t)); err != nil {
-		return err
-	}
-	b, err := proto.Marshal(req)
+func (s *Server) setupMembership() (err error) {
+	rpcAddr, err := s.ServerConfig.RPCAddr()
 	if err != nil {
 		return err
 	}
-	if _, err := buf.Write(b); err != nil {
-		return err
-	}
-	future := s.raft.Apply(buf.Bytes(), time.Second)
-	if future.Error() != nil {
-		return future.Error()
-	}
-	res := future.Response()
-	if err, ok := res.(error); ok {
-		return err
-	}
-	return nil
-}
-
-func (s *Server) setupMembership() (err error) {
-	s.membership, err = discovery.New(s.replicator, discovery.Config{
-		NodeName: "chickaree",
-		BindAddr: "127.0.0.1:8081",
+	s.membership, err = discovery.New(s.store, discovery.Config{
+		NodeName: s.ServerConfig.NodeName,
+		BindAddr: s.ServerConfig.BindAddr,
 		Tags: map[string]string{
-			"rpc_addr": "127.0.0.1:8080",
+			"rpc_addr": rpcAddr,
 		},
-		StartJoinAddrs: []string{},
+		StartJoinAddrs: s.ServerConfig.StartJoinAddrs,
 	})
 	return err
 }
@@ -130,12 +118,6 @@ func (s *Server) Get(ctx context.Context, req *chickaree.GetRequest) (*chickaree
 }
 
 func (s *Server) Set(ctx context.Context, req *chickaree.SetRequest) (*chickaree.SetResponse, error) {
-	if err := s.encode(Set, req); err != nil {
-		return nil, err
-	}
 	err := s.store.Set([]byte(req.Key), req.Value)
-	if err != nil {
-		return nil, err
-	}
-	return &chickaree.SetResponse{}, nil
+	return &chickaree.SetResponse{}, err
 }

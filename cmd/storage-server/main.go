@@ -21,8 +21,11 @@ func main() {
 	}
 	gsrv := grpc.NewServer()
 
-	srv, err := storage.NewServer(storage.Config{
-		StoragePath: "chickaree.db",
+	srv, err := storage.NewServer(storage.ServerConfig{
+		Config: storage.Config{
+			StoragePath: "chickaree.db",
+			RaftDir:     "/tmp",
+		},
 	})
 	if err != nil {
 		log.Panic(err)

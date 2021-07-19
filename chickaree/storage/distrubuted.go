@@ -22,6 +22,8 @@ import (
 	"github.com/holmes89/chickaree-db/chickaree/discovery"
 )
 
+var logFile = "events.log"
+
 type DistributedStorage struct {
 	config Config
 	store  storage
