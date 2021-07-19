@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -26,10 +27,9 @@ type Config struct {
 type Server struct {
 	chickaree.UnimplementedChickareeDBServer
 	Config
-	store      *eventLogger
-	membership *discovery.Membership // Refactor to extract replication logic.
+	store      storage
+	membership *discovery.Membership
 
-	replicator       *Replicator
 	raft             *raft.Raft
 	raftNetTransport *raft.NetworkTransport
 
@@ -40,7 +40,7 @@ type Server struct {
 }
 
 func NewServer(config Config) (*Server, error) {
-	store, err := NewEventLogger(config)
+	store, err := newStorage(config.StoragePath)
 	if err != nil {
 		return nil, err
 	}
@@ -48,6 +48,15 @@ func NewServer(config Config) (*Server, error) {
 		Config: config,
 		store:  store,
 	}
+
+	fsm := NewEventLogger(store)
+	r, trans, err := NewRaft(context.Background(), config, "test", "test", fsm)
+	if err != nil {
+		return s, errors.New("unable to register raft protocol")
+	}
+
+	s.raft = r
+	s.raftNetTransport = trans
 
 	return s, nil
 }
@@ -61,7 +70,6 @@ func (s *Server) Close() error {
 	close(s.close)
 	shutdown := []func() error{
 		s.membership.Leave,
-		s.replicator.Close,
 		s.store.Close,
 	}
 
@@ -130,23 +138,4 @@ func (s *Server) Set(ctx context.Context, req *chickaree.SetRequest) (*chickaree
 		return nil, err
 	}
 	return &chickaree.SetResponse{}, nil
-}
-
-func (s *Server) EventLog(req *chickaree.EventLogRequest, stream chickaree.ChickareeDB_EventLogServer) error {
-	evts, err := s.store.Events()
-	if err != nil {
-		return err
-	}
-	defer s.store.Leave(evts)
-	for {
-		select {
-		case <-stream.Context().Done():
-			return nil
-		case evt := <-evts:
-			stream.Send(&chickaree.EventLogResponse{
-				Command: []byte(evt.Command),
-				Args:    evt.Args,
-			})
-		}
-	}
 }

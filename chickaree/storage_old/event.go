@@ -15,7 +15,6 @@ import (
 
 var (
 	_ raft.FSM = &eventLogger{}
-	_ storage  = &eventLogger{}
 )
 
 type event struct {
@@ -24,56 +23,21 @@ type event struct {
 }
 
 type eventLogger struct {
-	mu     sync.RWMutex
-	events chan event
-	pubs   map[chan event]bool
-	store  storage
+	mu    sync.RWMutex
+	store storage
 }
 
 const logFile = "events.log"
 
-func NewEventLogger(cfg Config) (*eventLogger, error) {
-	store, err := newStorage(cfg.StoragePath)
-	if err != nil {
-		return nil, err
-	}
-	evts := make(chan event)
-	pubs := make(map[chan event]bool)
+func NewEventLogger(store storage) *eventLogger {
 	return &eventLogger{
-		mu:     sync.RWMutex{},
-		events: evts,
-		pubs:   pubs,
-		store:  store,
-	}, nil
-}
-
-func (l *eventLogger) Get(key []byte) ([]byte, error) {
-	return l.store.Get(key)
-}
-
-func (l *eventLogger) Set(key, value []byte) error {
-	evt := event{
-		Command: "set",
-		Args:    [][]byte{key, value},
+		mu:    sync.RWMutex{},
+		store: store,
 	}
-	l.write(evt)
-	return l.store.Set(key, value)
 }
 
 func (l *eventLogger) Close() error {
-	close(l.events)
-	for m := range l.pubs {
-		close(m)
-	}
 	return l.store.Close()
-}
-
-func (l *eventLogger) Run() {
-	for evt := range l.events {
-		for m := range l.pubs {
-			m <- evt
-		}
-	}
 }
 
 func (s *eventLogger) handleEvent(evt event) error {
@@ -86,11 +50,6 @@ func (s *eventLogger) handleEvent(evt event) error {
 	default:
 		return fmt.Errorf("unknown command: '%s'", command)
 	}
-}
-
-func (l *eventLogger) Leave(ch chan event) {
-	delete(l.pubs, ch)
-	close(ch)
 }
 
 func (l *eventLogger) Apply(lg *raft.Log) interface{} {
@@ -167,8 +126,6 @@ func (l *eventLogger) write(evt event) {
 	if _, err = f.WriteString(eLog); err != nil {
 		log.Fatal(err)
 	}
-
-	l.events <- evt
 }
 
 func readEvents(r io.ReadCloser) []event {
@@ -189,31 +146,4 @@ func readEvents(r io.ReadCloser) []event {
 	}
 
 	return buf
-}
-
-// May need to rethink this in the future, this will block writes as the file is read but if the file is large this will impact performance
-func (l *eventLogger) Events() (chan event, error) {
-	evts := make(chan event, 100)
-
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	f, err := os.OpenFile(logFile, os.O_RDONLY, 0600)
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-	defer f.Close()
-
-	buf := readEvents(f)
-	l.pubs[evts] = true
-	go l.eventLogs(evts, buf)
-
-	return evts, nil
-}
-
-func (l *eventLogger) eventLogs(evts chan event, buf []event) {
-	for _, evt := range buf {
-		evts <- evt
-	}
 }
