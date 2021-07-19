@@ -1,9 +1,9 @@
 package redis
 
 import (
-	"fmt"
-	"log"
 	"net"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/holmes89/chickaree-db/chickaree"
 )
@@ -22,9 +22,10 @@ func NewTCPServer(port string, client chickaree.ChickareeDBClient) *TcpServer {
 
 	listener, err := net.Listen("tcp", port)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err).Str("port", port).Msg("failed to listen")
 	}
-	fmt.Printf("listening on port %s\n", port)
+
+	log.Info().Str("port", port).Msg("listening...")
 
 	errch := make(chan error)
 	return &TcpServer{
@@ -42,14 +43,14 @@ func (s *TcpServer) Run() <-chan error {
 				s.errch <- err
 			}
 			_ = NewClient(conn, s.client)
-			fmt.Println("client connected")
+			log.Info().Msg("client connected")
 		}
 	}()
 	return s.errch
 }
 
 func (s *TcpServer) Close() error {
-	log.Println("closing server...")
+	log.Info().Msg("closing server...")
 	close(s.errch)
 	return s.listener.Close()
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/holmes89/chickaree-db/chickaree"
+	"github.com/rs/zerolog/log"
 )
 
 type Client struct {
@@ -31,7 +32,7 @@ func (c *Client) Read() {
 	}
 
 	c.conn.Close()
-	fmt.Println("client disconnected")
+	log.Info().Msg("client disconnected")
 }
 
 func (c *Client) Write() {
@@ -89,6 +90,7 @@ func (c *Client) Handle(req Request) []byte {
 	case "del":
 		return c.del(req.Args).Encode()
 	default:
+		log.Error().Str("command", req.Command).Msg("unknown command")
 		err := fmt.Errorf("unknown command '%s'", req.Command)
 		return ErrResponse(err).Encode()
 	}

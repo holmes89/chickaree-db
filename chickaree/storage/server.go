@@ -9,6 +9,7 @@ import (
 
 	"github.com/holmes89/chickaree-db/chickaree"
 	"github.com/holmes89/chickaree-db/chickaree/discovery"
+	"github.com/rs/zerolog/log"
 )
 
 type ServerConfig struct {
@@ -68,6 +69,7 @@ func NewServer(config ServerConfig) (*Server, error) {
 	return s, nil
 }
 func (s *Server) Close() error {
+	log.Info().Msg("server closing...")
 	s.shutdownLock.Lock()
 	defer s.shutdownLock.Unlock()
 	if s.shutdown {
@@ -85,10 +87,12 @@ func (s *Server) Close() error {
 			return err
 		}
 	}
+	log.Info().Msg("server closed.")
 	return nil
 }
 
 func (s *Server) setupMembership() (err error) {
+	log.Info().Msg("setting up membership")
 	rpcAddr, err := s.ServerConfig.RPCAddr()
 	if err != nil {
 		return err
@@ -101,6 +105,7 @@ func (s *Server) setupMembership() (err error) {
 		},
 		StartJoinAddrs: s.ServerConfig.StartJoinAddrs,
 	})
+	log.Info().Msg("membership established.")
 	return err
 }
 
@@ -120,4 +125,15 @@ func (s *Server) Get(ctx context.Context, req *chickaree.GetRequest) (*chickaree
 func (s *Server) Set(ctx context.Context, req *chickaree.SetRequest) (*chickaree.SetResponse, error) {
 	err := s.store.Set([]byte(req.Key), req.Value)
 	return &chickaree.SetResponse{}, err
+}
+
+func (s *Server) GetServers(
+	ctx context.Context, req *chickaree.GetServersRequest,
+) (
+	*chickaree.GetServersResponse, error) {
+	servers, err := s.store.GetServers()
+	if err != nil {
+		return nil, err
+	}
+	return &chickaree.GetServersResponse{Servers: servers}, nil
 }

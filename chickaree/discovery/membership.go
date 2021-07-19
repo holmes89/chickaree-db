@@ -1,8 +1,9 @@
 package discovery
 
 import (
-	"log"
 	"net"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/hashicorp/serf/serf"
 )
@@ -38,6 +39,7 @@ type Handler interface {
 }
 
 func (m *Membership) setupSerf() (err error) {
+	log.Info().Msg("setting up serf...")
 	addr, err := net.ResolveTCPAddr("tcp", m.BindAddr)
 	if err != nil {
 		return err
@@ -62,6 +64,7 @@ func (m *Membership) setupSerf() (err error) {
 			return err
 		}
 	}
+	log.Info().Msg("serf setup.")
 	return nil
 
 }
@@ -94,6 +97,7 @@ func (m *Membership) handleJoin(member serf.Member) {
 	); err != nil {
 		m.logError(err, "failed to join", member)
 	}
+	log.Info().Str("name", member.Name).Str("addr", member.Tags["rpc_addr"]).Msg("member joined")
 }
 func (m *Membership) handleLeave(member serf.Member) {
 	if err := m.handler.Leave(
@@ -101,17 +105,20 @@ func (m *Membership) handleLeave(member serf.Member) {
 	); err != nil {
 		m.logError(err, "failed to leave", member)
 	}
+	log.Info().Str("name", member.Name).Str("addr", member.Tags["rpc_addr"]).Msg("member left")
 }
 
 func (m *Membership) isLocal(member serf.Member) bool {
 	return m.serf.LocalMember().Name == member.Name
 }
 func (m *Membership) Members() []serf.Member {
+	log.Info().Msg("finding members...")
 	return m.serf.Members()
 }
 func (m *Membership) Leave() error {
+	log.Info().Msg("leaving...")
 	return m.serf.Leave()
 }
 func (m *Membership) logError(err error, msg string, member serf.Member) {
-	log.Printf("err: %v name: %v, rpc_addr: %v", err, member.Name, member.Tags["rpc_addr"])
+	log.Error().Err(err).Str("name", member.Name).Str("addr", member.Tags["rpc_addr"]).Msg(msg)
 }

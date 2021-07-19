@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/holmes89/chickaree-db/chickaree"
 	"github.com/holmes89/chickaree-db/chickaree/storage"
+	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 )
 
@@ -17,7 +17,7 @@ func main() {
 	port := 8080
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatal().Err(err).Int("port", port).Msg("failed to listen")
 	}
 	gsrv := grpc.NewServer()
 
@@ -28,14 +28,14 @@ func main() {
 		},
 	})
 	if err != nil {
-		log.Panic(err)
+		log.Fatal().Err(err).Msg("unable to create server")
 	}
 	defer srv.Close()
 	chickaree.RegisterChickareeDBServer(gsrv, srv)
 
 	errs := make(chan error, 2) // This is used to handle and log the reason why the application quit.
 	go func() {
-		fmt.Printf("listening on port %d...\n", port)
+		log.Info().Int("port", port).Msg("listening...")
 		errs <- gsrv.Serve(lis)
 	}()
 	go func() {
@@ -45,5 +45,5 @@ func main() {
 		gsrv.GracefulStop()
 	}()
 
-	fmt.Printf("terminated: %s\n", <-errs)
+	log.Error().Err(<-errs).Msg("terminated")
 }

@@ -2,10 +2,10 @@ package main
 
 import (
 	"flag"
-	"log"
 
 	"github.com/holmes89/chickaree-db/chickaree"
 	"github.com/holmes89/chickaree-db/chickaree/redis"
+	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 )
 
@@ -15,10 +15,12 @@ func main() {
 	flag.StringVar(&port, "port", "6379", "port to listen on")
 	flag.Parse()
 
+	url := ":8080"
+
 	opts := []grpc.DialOption{grpc.WithInsecure()}
-	conn, err := grpc.Dial(":8080", opts...)
+	conn, err := grpc.Dial(url, opts...)
 	if err != nil {
-		log.Fatalf("fail to dial: %v", err)
+		log.Fatal().Err(err).Str("url", url).Msg("failed to dial GRPC")
 	}
 	defer conn.Close()
 	client := chickaree.NewChickareeDBClient(conn)
@@ -26,6 +28,5 @@ func main() {
 	tcpServer := redis.NewTCPServer(port, client)
 	defer tcpServer.Close()
 
-	log.Println(<-tcpServer.Run())
-
+	log.Error().Err(<-tcpServer.Run()).Msg("terminated")
 }

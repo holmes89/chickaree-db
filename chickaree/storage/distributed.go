@@ -4,14 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 
 	boltdb "github.com/hashicorp/raft-boltdb"
 	"google.golang.org/protobuf/proto"
@@ -51,19 +53,23 @@ func (s *DistributedStorage) setupRaft() error {
 
 	logStore, err := boltdb.NewBoltStore(filepath.Join(baseDir, "logs.dat"))
 	if err != nil {
+		log.Error().Err(err).Msg("unable to create bolt sroage for logs")
 		return fmt.Errorf(`boltdb.NewBoltStore(%q): %v`, filepath.Join(baseDir, "logs.dat"), err)
 	}
 
 	stableStore, err := boltdb.NewBoltStore(filepath.Join(baseDir, "stable.dat"))
 	if err != nil {
+		log.Error().Err(err).Msg("unable to create bolt sroage for stable messages")
 		return fmt.Errorf(`boltdb.NewBoltStore(%q): %v`, filepath.Join(baseDir, "stable.dat"), err)
 	}
 
 	snapshotStore, err := raft.NewFileSnapshotStore(baseDir, 3, os.Stderr)
 	if err != nil {
+		log.Error().Err(err).Msg("unable to create bolt sroage for snapshots")
 		return fmt.Errorf(`raft.NewFileSnapshotStore(%q, ...): %v`, baseDir, err)
 	}
 
+	log.Info().Msg("distributed server raft storage created")
 	fsm := &fsm{store: s.store}
 
 	maxPool := 5
@@ -78,15 +84,19 @@ func (s *DistributedStorage) setupRaft() error {
 	config := raft.DefaultConfig()
 	config.LocalID = s.config.Raft.LocalID
 	if s.config.Raft.HeartbeatTimeout != 0 {
+		log.Info().Dur("timeout", s.config.Raft.HeartbeatTimeout).Msg("overriding heartbeat timeout")
 		config.HeartbeatTimeout = s.config.Raft.HeartbeatTimeout
 	}
 	if s.config.Raft.ElectionTimeout != 0 {
+		log.Info().Dur("timeout", s.config.Raft.ElectionTimeout).Msg("overriding election timeout")
 		config.ElectionTimeout = s.config.Raft.ElectionTimeout
 	}
 	if s.config.Raft.LeaderLeaseTimeout != 0 {
+		log.Info().Dur("timeout", s.config.Raft.LeaderLeaseTimeout).Msg("overriding leaderlease timeout")
 		config.LeaderLeaseTimeout = s.config.Raft.LeaderLeaseTimeout
 	}
 	if s.config.Raft.CommitTimeout != 0 {
+		log.Info().Dur("timeout", s.config.Raft.CommitTimeout).Msg("overriding commit timeout")
 		config.CommitTimeout = s.config.Raft.CommitTimeout
 	}
 
@@ -99,6 +109,7 @@ func (s *DistributedStorage) setupRaft() error {
 		transport,
 	)
 	if err != nil {
+		log.Error().Err(err).Msg("unable to create raft")
 		return err
 	}
 	hasState, err := raft.HasExistingState(
@@ -107,18 +118,24 @@ func (s *DistributedStorage) setupRaft() error {
 		snapshotStore,
 	)
 	if err != nil {
+		log.Error().Err(err).Msg("unable to determine existing state")
 		return err
 	}
 	if s.config.Raft.Bootstrap && !hasState {
+		log.Info().Interface("id", config.LocalID).Msg("bootstrapping cluster")
 		config := raft.Configuration{
 			Servers: []raft.Server{{
 				ID:      config.LocalID,
 				Address: raft.ServerAddress(s.config.Raft.BindAddr),
 			}},
 		}
-		err = s.raft.BootstrapCluster(config).Error()
+		if err := s.raft.BootstrapCluster(config).Error(); err != nil {
+			log.Error().Err(err).Msg("unable to bootstrap cluster")
+			return err
+		}
 	}
-	return err
+	log.Info().Msg("distributed server raft connected")
+	return nil
 }
 
 var _ storage = &DistributedStorage{}
@@ -174,8 +191,10 @@ func (s *DistributedStorage) apply(reqType RequestType, req proto.Message) (
 }
 
 func (s *DistributedStorage) Join(id, addr string) error {
+	log.Info().Str("id", id).Str("addr", addr).Msg("joining cluster...")
 	configFuture := s.raft.GetConfiguration()
 	if err := configFuture.Error(); err != nil {
+		log.Error().Err(err).Msg("unable to get raft configuration")
 		return err
 	}
 	serverID := raft.ServerID(id)
@@ -183,20 +202,23 @@ func (s *DistributedStorage) Join(id, addr string) error {
 	for _, srv := range configFuture.Configuration().Servers {
 		if srv.ID == serverID || srv.Address == serverAddr {
 			if srv.ID == serverID && srv.Address == serverAddr {
-				// server has already joined
+				log.Warn().Str("id", id).Str("addr", addr).Msg("server already joined")
 				return nil
 			}
 			// remove the existing server
 			removeFuture := s.raft.RemoveServer(serverID, 0, 0)
 			if err := removeFuture.Error(); err != nil {
+				log.Error().Err(err).Msg("unable to remove existing server")
 				return err
 			}
 		}
 	}
 	addFuture := s.raft.AddVoter(serverID, serverAddr, 0, 0)
 	if err := addFuture.Error(); err != nil {
+		log.Error().Err(err).Msg("unable to add voter")
 		return err
 	}
+	log.Info().Str("id", id).Str("addr", addr).Msg("joined cluster")
 	return nil
 }
 
@@ -212,6 +234,7 @@ func (s *DistributedStorage) WaitForLeader(timeout time.Duration) error {
 	for {
 		select {
 		case <-timeoutc:
+			log.Error().Msg("finding leader has timed out")
 			return fmt.Errorf("timed out")
 		case <-ticker.C:
 			if l := s.raft.Leader(); l != "" {
@@ -224,6 +247,7 @@ func (s *DistributedStorage) WaitForLeader(timeout time.Duration) error {
 func (s *DistributedStorage) Close() error {
 	f := s.raft.Shutdown()
 	if err := f.Error(); err != nil {
+		log.Error().Err(err).Msg("unable to shutdown raft")
 		return err
 	}
 	return s.store.Close()
@@ -232,7 +256,8 @@ func (s *DistributedStorage) Close() error {
 func (s *DistributedStorage) GetServers() ([]*api.Server, error) {
 	future := s.raft.GetConfiguration()
 	if err := future.Error(); err != nil {
-		return nil, err
+		log.Error().Err(err).Msg("unable to get configuration")
+		return nil, errors.New("unable to get servers")
 	}
 	var servers []*api.Server
 	for _, server := range future.Configuration().Servers {
@@ -288,12 +313,12 @@ func (s *fsm) write(body []byte) {
 
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err).Msg("unable to open log file")
 	}
 	defer f.Close()
 
 	if _, err := f.Write(body); err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err).Msg("unable to write to log file")
 	}
 }
 
@@ -302,15 +327,15 @@ func (f *fsm) Snapshot() (raft.FSMSnapshot, error) {
 	defer f.mu.RUnlock()
 	fi, err := os.OpenFile(logFile, os.O_RDONLY, 0600)
 	if err != nil {
-		log.Println(err)
-		return nil, err
+		log.Fatal().Err(err).Msg("unable to open log file")
+		return nil, errors.New("failed to create snapshot")
 	}
 
 	defer fi.Close()
 	b, err := io.ReadAll(fi)
 	if err != nil {
-		log.Println(err)
-		return nil, err
+		log.Fatal().Err(err).Msg("unable to read log file")
+		return nil, errors.New("failed to create snapshot")
 	}
 	return &snapshot{reader: bytes.NewBuffer(b)}, nil
 }
@@ -368,12 +393,14 @@ func (s *StreamLayer) Dial(
 	dialer := &net.Dialer{Timeout: timeout}
 	var conn, err = dialer.Dial("tcp", string(addr))
 	if err != nil {
-		return nil, err
+		log.Fatal().Err(err).Msg("unable to dial")
+		return nil, errors.New("failed to dial")
 	}
 	// identify to mux this is a raft rpc
 	_, err = conn.Write([]byte{byte(RaftRPC)})
 	if err != nil {
-		return nil, err
+		log.Fatal().Err(err).Msg("unable to write raft rpc")
+		return nil, errors.New("failed to dial")
 	}
 	if s.peerTLSConfig != nil {
 		conn = tls.Client(conn, s.peerTLSConfig)
@@ -384,12 +411,14 @@ func (s *StreamLayer) Dial(
 func (s *StreamLayer) Accept() (net.Conn, error) {
 	conn, err := s.ln.Accept()
 	if err != nil {
-		return nil, err
+		log.Fatal().Err(err).Msg("unable to accept message")
+		return nil, errors.New("failed to accept")
 	}
 	b := make([]byte, 1)
 	_, err = conn.Read(b)
 	if err != nil {
-		return nil, err
+		log.Fatal().Err(err).Msg("unable to read connection")
+		return nil, errors.New("failed to accept")
 	}
 	if bytes.Compare([]byte{byte(RaftRPC)}, b) != 0 {
 		return nil, fmt.Errorf("not a raft rpc")
