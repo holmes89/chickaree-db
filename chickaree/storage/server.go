@@ -2,42 +2,12 @@ package storage
 
 import (
 	"context"
-	"crypto/tls"
-	"fmt"
-	"net"
 	"sync"
 
 	"github.com/holmes89/chickaree-db/chickaree"
 	"github.com/holmes89/chickaree-db/chickaree/discovery"
 	"github.com/rs/zerolog/log"
 )
-
-type ServerConfig struct {
-	Config
-	ServerTLSConfig *tls.Config
-	PeerTLSConfig   *tls.Config
-	// DataDir stores the log and raft data.
-	DataDir string
-	// BindAddr is the address serf runs on.
-	BindAddr string
-	// RPCPort is the port for client (and Raft) connections.
-	RPCPort int
-	// Raft server id.
-	NodeName string
-	// Bootstrap should be set to true when starting the first node of the cluster.
-	StartJoinAddrs []string
-	ACLModelFile   string
-	ACLPolicyFile  string
-	Bootstrap      bool
-}
-
-func (c ServerConfig) RPCAddr() (string, error) {
-	host, _, err := net.SplitHostPort(c.BindAddr)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s:%d", host, c.RPCPort), nil
-}
 
 type Server struct {
 	chickaree.UnimplementedChickareeDBServer

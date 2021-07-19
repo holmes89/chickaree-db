@@ -21,12 +21,11 @@ func main() {
 	}
 	gsrv := grpc.NewServer()
 
-	srv, err := storage.NewServer(storage.ServerConfig{
-		Config: storage.Config{
-			StoragePath: "chickaree.db",
-			RaftDir:     "/tmp",
-		},
-	})
+	cfg, err := storage.LoadConfiguration()
+	if err != nil {
+		log.Fatal().Err(err).Msg("unable to load configuration")
+	}
+	srv, err := storage.NewServer(cfg)
 	if err != nil {
 		log.Fatal().Err(err).Msg("unable to create server")
 	}
