@@ -1,0 +1,15 @@
+version: '3.7'
+
+services:
+  client:
+    image: holmes89/chickaree-client
+    build:
+      context: .
+      dockerfile: docker/client/Dockerfile
+      target: prod
+  storage:
+    image: holmes89/chickaree-storage
+    build:
+      context: .
+      dockerfile: docker/storage/Dockerfile
+      target: prod
