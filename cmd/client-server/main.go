@@ -15,7 +15,7 @@ func main() {
 	flag.StringVar(&port, "port", "6379", "port to listen on")
 	flag.Parse()
 
-	url := ":8080"
+	url := ":8080" // TODO discovery
 
 	opts := []grpc.DialOption{grpc.WithInsecure()}
 	conn, err := grpc.Dial(url, opts...)

@@ -8,6 +8,7 @@ require (
 	github.com/hashicorp/raft-boltdb v0.0.0-20210422161416-485fa74b0b01
 	github.com/hashicorp/serf v0.9.5
 	github.com/rs/zerolog v1.23.0 // indirect
+	github.com/soheilhy/cmux v0.1.5 // indirect
 	go.etcd.io/bbolt v1.3.6
 	golang.org/x/net v0.0.0-20210525063256-abc453219eb5 // indirect
 	golang.org/x/sys v0.0.0-20210525143221-35b2ab0089ea // indirect

@@ -110,7 +110,7 @@ func (s *DistributedStorage) setupRaft() error {
 	)
 	if err != nil {
 		log.Error().Err(err).Msg("unable to create raft")
-		return err
+		return errors.New("failed to create raft")
 	}
 	hasState, err := raft.HasExistingState(
 		logStore,
@@ -119,7 +119,7 @@ func (s *DistributedStorage) setupRaft() error {
 	)
 	if err != nil {
 		log.Error().Err(err).Msg("unable to determine existing state")
-		return err
+		return errors.New("failed to create raft")
 	}
 	if s.config.Raft.Bootstrap && !hasState {
 		log.Info().Interface("id", config.LocalID).Msg("bootstrapping cluster")

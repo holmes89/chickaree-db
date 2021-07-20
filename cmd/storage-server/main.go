@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,11 +13,7 @@ import (
 )
 
 func main() {
-	port := 8080
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		log.Fatal().Err(err).Int("port", port).Msg("failed to listen")
-	}
+
 	gsrv := grpc.NewServer()
 
 	cfg, err := storage.LoadConfiguration()
@@ -34,8 +29,8 @@ func main() {
 
 	errs := make(chan error, 2) // This is used to handle and log the reason why the application quit.
 	go func() {
-		log.Info().Int("port", port).Msg("listening...")
-		errs <- gsrv.Serve(lis)
+		log.Info().Int("port", cfg.RPCPort).Msg("listening...")
+		errs <- gsrv.Serve(srv.Mux())
 	}()
 	go func() {
 		c := make(chan os.Signal, 1)

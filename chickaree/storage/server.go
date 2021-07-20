@@ -1,12 +1,20 @@
 package storage
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net"
 	"sync"
+	"time"
 
+	"github.com/hashicorp/raft"
 	"github.com/holmes89/chickaree-db/chickaree"
 	"github.com/holmes89/chickaree-db/chickaree/discovery"
 	"github.com/rs/zerolog/log"
+	"github.com/soheilhy/cmux"
 )
 
 type Server struct {
@@ -14,6 +22,7 @@ type Server struct {
 	ServerConfig
 	store      *DistributedStorage
 	membership *discovery.Membership
+	mux        cmux.CMux
 
 	shutdown     bool
 	shutdowns    chan struct{}
@@ -21,23 +30,30 @@ type Server struct {
 }
 
 func NewServer(config ServerConfig) (*Server, error) {
-	store, err := newStorage(config.StoragePath)
-	if err != nil {
-		return nil, err
-	}
-	distStore, err := NewDistributedStorage(store, config.Config)
-	if err != nil {
-		return nil, err
-	}
+
 	s := &Server{
 		ServerConfig: config,
-		store:        distStore,
+		shutdowns:    make(chan struct{}),
 	}
 
-	s.setupMembership()
+	setup := []func() error{
+		s.setupMux,
+		s.setupStorage,
+		s.setupMembership,
+	}
+	for _, fn := range setup {
+		if err := fn(); err != nil {
+			return nil, err
+		}
+	}
 
 	return s, nil
 }
+
+func (s *Server) Mux() net.Listener {
+	return s.mux.Match(cmux.Any())
+}
+
 func (s *Server) Close() error {
 	log.Info().Msg("server closing...")
 	s.shutdownLock.Lock()
@@ -57,6 +73,7 @@ func (s *Server) Close() error {
 			return err
 		}
 	}
+	s.mux.Close()
 	log.Info().Msg("server closed.")
 	return nil
 }
@@ -76,7 +93,70 @@ func (s *Server) setupMembership() (err error) {
 		StartJoinAddrs: s.ServerConfig.StartJoinAddrs,
 	})
 	log.Info().Msg("membership established.")
+
 	return err
+}
+
+func (s *Server) setupStorage() error {
+	store, err := newStorage(s.ServerConfig.StoragePath)
+	if err != nil {
+		log.Error().Err(err).Msg("unable to create storage")
+		return errors.New("unable to setup storage")
+	}
+	raftLn := s.mux.Match(func(reader io.Reader) bool {
+		b := make([]byte, 1)
+		if _, err := reader.Read(b); err != nil {
+			return false
+		}
+		return bytes.Compare(b, []byte{byte(RaftRPC)}) == 0
+	})
+	config := s.ServerConfig.Config
+	config.Raft.StreamLayer = NewStreamLayer(
+		raftLn,
+		s.ServerConfig.ServerTLSConfig,
+		s.ServerConfig.PeerTLSConfig,
+	)
+	rpcAddr, err := s.ServerConfig.RPCAddr()
+	if err != nil {
+		log.Error().Err(err).Msg("unable to get rpc addr")
+		return errors.New("unable to setup storage")
+	}
+	config.Raft.BindAddr = rpcAddr
+	config.Raft.LocalID = raft.ServerID(s.ServerConfig.NodeName)
+	config.Raft.Bootstrap = s.ServerConfig.Bootstrap
+	s.store, err = NewDistributedStorage(
+		store,
+		config,
+	)
+	if err != nil {
+		log.Error().Err(err).Msg("unable to create distributed storage")
+		return errors.New("unable to setup storage")
+	}
+	if s.ServerConfig.Bootstrap {
+		if err := s.store.WaitForLeader(3 * time.Second); err != nil {
+			log.Error().Err(err).Msg("unable to wait for leader")
+			return errors.New("unable to setup storage")
+		}
+	}
+	return nil
+}
+
+func (s *Server) setupMux() error {
+	addr, err := net.ResolveTCPAddr("tcp", s.ServerConfig.BindAddr)
+	if err != nil {
+		return err
+	}
+	rpcAddr := fmt.Sprintf(
+		"%s:%d",
+		addr.IP.String(),
+		s.ServerConfig.RPCPort,
+	)
+	ln, err := net.Listen("tcp", rpcAddr)
+	if err != nil {
+		return err
+	}
+	s.mux = cmux.New(ln)
+	return nil
 }
 
 func (s *Server) Get(ctx context.Context, req *chickaree.GetRequest) (*chickaree.GetResponse, error) {

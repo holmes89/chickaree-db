@@ -67,6 +67,8 @@ func LoadConfiguration() (ServerConfig, error) {
 	}
 
 	cfg.LoadFromEnv()
+
+	cfg.Raft.LocalID = raft.ServerID(cfg.NodeName)
 	return cfg, nil
 }
 
