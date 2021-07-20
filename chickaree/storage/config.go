@@ -15,8 +15,8 @@ import (
 )
 
 type Config struct {
-	StoragePath string
-	RaftDir     string
+	StoragePath string `yaml:"storage-path"`
+	RaftDir     string `yaml:"raft-dir"`
 	Raft        struct {
 		raft.Config
 		BindAddr    string
@@ -26,7 +26,7 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Config
+	Config          `yaml:"config"`
 	ServerTLSConfig *tls.Config
 	PeerTLSConfig   *tls.Config
 	// DataDir stores the log and raft data.

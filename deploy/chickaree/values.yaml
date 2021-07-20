@@ -8,7 +8,7 @@ image:
   repository: holmes89/chickaree
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: "0.0.2"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -80,3 +80,6 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+storage: 1Gi
+serfPort: 8401
+rpcPort: 8400

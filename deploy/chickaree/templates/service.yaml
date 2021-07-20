@@ -3,7 +3,7 @@ kind: Service
 metadata:
   name: {{ include "chickaree.fullname" . }}-client
   labels:
-    {{- include "chickaree.labels" . | nindent 4 }}
+    {{- include "chickaree.labels" . | nindent 4 }}}-client
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -19,13 +19,20 @@ kind: Service
 metadata:
   name: {{ include "chickaree.fullname" . }}-storage
   labels:
-    {{- include "chickaree.labels" . | nindent 4 }}
+    {{- include "chickaree.labels" . | nindent 4 }}-storage
 spec:
   type: {{ .Values.service.type }}
   ports:
-    - port: 8080
-      targetPort: http
-      protocol: TCP
-      name: http
+    - name: rpc
+      port: {{ .Values.rpcPort }}
+      targetPort: {{ .Values.rpcPort }}
+    - name: serf-tcp
+      protocol: "TCP"
+      port: {{ .Values.serfPort }}
+      targetPort: {{ .Values.serfPort }}
+    - name: serf-udp
+      protocol: "UDP"
+      port: {{ .Values.serfPort }}
+      targetPort: {{ .Values.serfPort }}
   selector:
     {{- include "chickaree.selectorLabels" . | nindent 4 }}

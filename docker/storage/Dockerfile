@@ -9,6 +9,7 @@ FROM deps AS build-env
 ADD cmd ./cmd
 ADD chickaree ./chickaree
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-w -X main.docker=true" -o storage cmd/storage-server/main.go
+CMD ["/storage"]
 
 FROM scratch AS prod
 

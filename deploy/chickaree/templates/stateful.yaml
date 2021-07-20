@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "chickaree.fullname" . }}-storage
+  labels:
+    {{- include "chickaree.labels" . | nindent 4 }}-storage
+spec:
+  replicas: 3
+  serviceName: {{include "chickaree.fullname" . }}
+  selector:
+    matchLabels:
+      {{- include "chickaree.selectorLabels" . | nindent 6 }}-storage
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}-storage
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "chickaree.selectorLabels" . | nindent 8 }}-storage
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "chickaree.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:      
+      - name: {{ .Chart.Name }}-storage-config-init
+        image: busybox
+        imagePullPolicy: IfNotPresent
+        command:          
+          - /bin/sh
+          - -c
+          - |-
+            ID=$(echo $HOSTNAME | rev | cut -d- -f1 | rev)
+            mkdir -p /var/run/chickaree/data
+            cat > /var/run/chickaree/config.yaml <<EOD
+            data-dir: /var/run/chickaree/data
+            config:
+              storage-path: /var/run/chickaree/data/chickaree.db
+              raft-dir: /var/run/chickaree/data
+            rpc-port: {{.Values.rpcPort}}
+            bind-addr: "$HOSTNAME.chickaree.{{.Release.Namespace}}.svc.cluster.local:{{.Values.serfPort}}"
+            bootstrap: $([ $ID = 0 ] && echo true || echo false )
+            $([ $ID != 0 ] && echo 'start-join-addrs: "chickaree-0.chickaree.{{.Release.Namespace}}.svc.cluster.local:{{.Values.serfPort}}"')
+            EOD
+        volumeMounts:
+        - name: datadir
+          mountPath: /var/run/chickaree
+      containers:
+        - name: {{ .Chart.Name }}-storage
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}-storage:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.rpcPort }}
+              name: rpc
+            - containerPort: {{ .Values.serfPort }}
+              name: serf
+          args:
+            - --config-file=/var/run/chickaree/config.yaml
+          volumeMounts:
+          - name: datadir
+            mountPath: /var/run/chickaree     
+  volumeClaimTemplates:
+  - metadata:
+      name: datadir
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: {{.Values.storage}}
