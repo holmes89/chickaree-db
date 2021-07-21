@@ -37,6 +37,9 @@ spec:
             - name: http
               containerPort: 6379
               protocol: TCP
+          env:
+          - name: STORAGE_SERVER
+            value: "chickaree-storage.chickaree.{{.Release.Namespace}}.svc.cluster.local:{{ .Values.rpcPort }}"
           # livenessProbe:
           #   httpGet:
           #     path: /

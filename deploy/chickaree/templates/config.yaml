@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storage-config
+data:
+  DATA_DIR: /var/run/chickaree/
+  RPC_PORT: {{.Values.rpcPort}}
+  BIND_ADDR: "$HOSTNAME.chickaree.{{.Release.Namespace}}.svc.cluster.local:{{.Values.serfPort}}"
+  START_JOIN_ADDRS: "chickaree-storage-0.chickaree.{{.Release.Namespace}}.svc.cluster.local:{{.Values.serfPort}}"
+  STORAGE_PATH: /var/run/chickaree/chickaree.db
+  RAFT_DIR: /var/run/chickaree/

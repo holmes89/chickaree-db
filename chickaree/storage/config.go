@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/hashicorp/raft"
 	"github.com/rs/zerolog/log"
@@ -35,6 +36,7 @@ type ServerConfig struct {
 	BindAddr string `yaml:"bind-addr"`
 	// RPCPort is the port for client (and Raft) connections.
 	RPCPort int `yaml:"rpc-port"`
+	SefPort int `yaml:"serf-port"`
 	// Raft server id.
 	NodeName string `yaml:"node-name"`
 	// Bootstrap should be set to true when starting the first node of the cluster.
@@ -50,14 +52,19 @@ func LoadConfiguration() (ServerConfig, error) {
 	if err != nil {
 		log.Error().Err(err).Msg("unable to find hostname")
 	}
+
+	hostNameSplit := strings.Split(hostname, "-")
+	defaultBootstrap := hostNameSplit[len(hostNameSplit)-1] == "0"
+
 	cfg := ServerConfig{
 		Config: Config{
 			StoragePath: "chicakree.db",
 			RaftDir:     "/tmp",
 		},
-		NodeName: hostname,
-		BindAddr: "127.0.0.1:8401",
-		RPCPort:  8400,
+		NodeName:  hostname,
+		RPCPort:   8400,
+		SefPort:   8401,
+		Bootstrap: defaultBootstrap,
 	}
 
 	if cfgfilePtr != nil && *cfgfilePtr != "" { // #3
@@ -68,6 +75,13 @@ func LoadConfiguration() (ServerConfig, error) {
 
 	cfg.LoadFromEnv()
 
+	if strings.Contains(cfg.BindAddr, "$HOSTNAME") {
+		cfg.BindAddr = strings.Replace(cfg.BindAddr, "$HOSTNAME", hostname, 1)
+	}
+
+	if cfg.Bootstrap {
+		cfg.StartJoinAddrs = nil
+	}
 	cfg.Raft.LocalID = raft.ServerID(cfg.NodeName)
 	return cfg, nil
 }
@@ -89,6 +103,15 @@ func (config ServerConfig) LoadFromEnv() {
 	if val := os.Getenv("DATA_DIR"); val != "" {
 		config.DataDir = val
 	}
+	if val := os.Getenv("RAFT_DIR"); val != "" {
+		config.Config.RaftDir = val
+	}
+	if val := os.Getenv("STORAGE_PATH"); val != "" {
+		config.Config.StoragePath = val
+	}
+	if val := os.Getenv("STORAGE_PATH"); val != "" {
+		config.Config.StoragePath = val
+	}
 	if val := os.Getenv("STORAGE_PATH"); val != "" {
 		config.StoragePath = val
 	}
@@ -106,6 +129,10 @@ func (config ServerConfig) LoadFromEnv() {
 	if val := os.Getenv("BOOTSTRAP"); val != "" {
 		config.Bootstrap = (val == "true" || val == "1")
 	}
+	if val := os.Getenv("START_JOIN_ADDRS"); val != "" {
+		config.StartJoinAddrs = []string{val}
+	}
+
 	return
 }
 

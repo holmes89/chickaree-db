@@ -26,29 +26,6 @@ spec:
       serviceAccountName: {{ include "chickaree.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      initContainers:      
-      - name: {{ .Chart.Name }}-storage-config-init
-        image: busybox
-        imagePullPolicy: IfNotPresent
-        command:          
-          - /bin/sh
-          - -c
-          - |-
-            ID=$(echo $HOSTNAME | rev | cut -d- -f1 | rev)
-            mkdir -p /var/run/chickaree/data
-            cat > /var/run/chickaree/config.yaml <<EOD
-            data-dir: /var/run/chickaree/data
-            config:
-              storage-path: /var/run/chickaree/data/chickaree.db
-              raft-dir: /var/run/chickaree/data
-            rpc-port: {{.Values.rpcPort}}
-            bind-addr: "$HOSTNAME.chickaree.{{.Release.Namespace}}.svc.cluster.local:{{.Values.serfPort}}"
-            bootstrap: $([ $ID = 0 ] && echo true || echo false )
-            $([ $ID != 0 ] && echo 'start-join-addrs: "chickaree-0.chickaree.{{.Release.Namespace}}.svc.cluster.local:{{.Values.serfPort}}"')
-            EOD
-        volumeMounts:
-        - name: datadir
-          mountPath: /var/run/chickaree
       containers:
         - name: {{ .Chart.Name }}-storage
           securityContext:
@@ -60,8 +37,9 @@ spec:
               name: rpc
             - containerPort: {{ .Values.serfPort }}
               name: serf
-          args:
-            - --config-file=/var/run/chickaree/config.yaml
+          envFrom:
+          - configMapRef:
+              name: storage-config
           volumeMounts:
           - name: datadir
             mountPath: /var/run/chickaree     
