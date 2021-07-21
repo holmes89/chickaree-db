@@ -99,37 +99,39 @@ func (config *ServerConfig) LoadFromFile(path string) error {
 	return nil
 }
 
-func (config ServerConfig) LoadFromEnv() {
+func (config *ServerConfig) LoadFromEnv() {
 	if val := os.Getenv("DATA_DIR"); val != "" {
+		log.Info().Str("data-dir", val).Msg("update config from env")
 		config.DataDir = val
 	}
 	if val := os.Getenv("RAFT_DIR"); val != "" {
+		log.Info().Str("raft-dir", val).Msg("update config from env")
 		config.Config.RaftDir = val
 	}
 	if val := os.Getenv("STORAGE_PATH"); val != "" {
+		log.Info().Str("storage-path", val).Msg("update config from env")
 		config.Config.StoragePath = val
-	}
-	if val := os.Getenv("STORAGE_PATH"); val != "" {
-		config.Config.StoragePath = val
-	}
-	if val := os.Getenv("STORAGE_PATH"); val != "" {
-		config.StoragePath = val
 	}
 	if val := os.Getenv("NODE_NAME"); val != "" {
+		log.Info().Str("node-name", val).Msg("update config from env")
 		config.NodeName = val
 	}
 	if val := os.Getenv("BIND_ADDR"); val != "" {
+		log.Info().Str("bind-addr", val).Msg("update config from env")
 		config.BindAddr = val
 	}
 	if val := os.Getenv("RPC_PORT"); val != "" {
 		if v, err := strconv.Atoi(val); err == nil {
+			log.Info().Str("rpc-port", val).Msg("update config from env")
 			config.RPCPort = v
 		}
 	}
 	if val := os.Getenv("BOOTSTRAP"); val != "" {
+		log.Info().Str("bootstrap", val).Msg("update config from env")
 		config.Bootstrap = (val == "true" || val == "1")
 	}
 	if val := os.Getenv("START_JOIN_ADDRS"); val != "" {
+		log.Info().Str("start-join-addrs", val).Msg("update config from env")
 		config.StartJoinAddrs = []string{val}
 	}
 

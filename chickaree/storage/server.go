@@ -79,10 +79,11 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) setupMembership() (err error) {
-	log.Info().Msg("setting up membership")
+	log.Info().Str("bind-addr", s.ServerConfig.BindAddr).Str("node-name", s.ServerConfig.NodeName).Msg("setting up membership")
 	rpcAddr, err := s.ServerConfig.RPCAddr()
 	if err != nil {
-		return err
+		log.Error().Err(err).Msg("unable to resolve rpc")
+		return errors.New("unable to setup membership")
 	}
 	s.membership, err = discovery.New(s.store, discovery.Config{
 		NodeName: s.ServerConfig.NodeName,
@@ -92,9 +93,13 @@ func (s *Server) setupMembership() (err error) {
 		},
 		StartJoinAddrs: s.ServerConfig.StartJoinAddrs,
 	})
+	if err != nil {
+		log.Error().Err(err).Msg("unable to setup membership")
+		return errors.New("unable to setup membership")
+	}
 	log.Info().Msg("membership established.")
 
-	return err
+	return nil
 }
 
 func (s *Server) setupStorage() error {
@@ -142,9 +147,11 @@ func (s *Server) setupStorage() error {
 }
 
 func (s *Server) setupMux() error {
+	log.Info().Str("bind-addr", s.ServerConfig.BindAddr).Msg("creating mux...")
 	addr, err := net.ResolveTCPAddr("tcp", s.ServerConfig.BindAddr)
 	if err != nil {
-		return err
+		log.Error().Err(err).Str("bind-addr", s.ServerConfig.BindAddr).Msg("failed to setup tcp")
+		return errors.New("unable to setup mux")
 	}
 	rpcAddr := fmt.Sprintf(
 		"%s:%d",
@@ -153,9 +160,11 @@ func (s *Server) setupMux() error {
 	)
 	ln, err := net.Listen("tcp", rpcAddr)
 	if err != nil {
-		return err
+		log.Error().Err(err).Str("rpc-addr", rpcAddr).Msg("failed to listen")
+		return errors.New("unable to setup mux")
 	}
 	s.mux = cmux.New(ln)
+	log.Info().Msg("mux created.")
 	return nil
 }
 

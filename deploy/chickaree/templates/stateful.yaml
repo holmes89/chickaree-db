@@ -1,42 +1,34 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "chickaree.fullname" . }}-storage
+  name: chickaree-storage
+  namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "chickaree.labels" . | nindent 4 }}-storage
+    {{- include "chickaree.labels" . | nindent 4 }}
+  annotations:
+    service-per-pod-label: "statefulset.kubernetes.io/pod-name"
+    service-per-pod-ports: "{{.Values.rpcPort}}:{{.Values.rpcPort}}"
 spec:
   replicas: 3
-  serviceName: {{include "chickaree.fullname" . }}
+  serviceName: chickaree-storage
   selector:
     matchLabels:
-      {{- include "chickaree.selectorLabels" . | nindent 6 }}-storage
+      {{- include "chickaree.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- with .Values.podAnnotations }}-storage
-      annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      name: chickaree-storage
       labels:
-        {{- include "chickaree.selectorLabels" . | nindent 8 }}-storage
+        {{- include "chickaree.selectorLabels" . | nindent 8 }}
     spec:
-      {{- with .Values.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      serviceAccountName: {{ include "chickaree.serviceAccountName" . }}
-      securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}-storage
-          securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}-storage:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - containerPort: {{ .Values.rpcPort }}
-              name: rpc
-            - containerPort: {{ .Values.serfPort }}
-              name: serf
+          - containerPort: {{ .Values.rpcPort }}
+            name: rpc
+          - containerPort: {{ .Values.serfPort }}
+            name: serf
           envFrom:
           - configMapRef:
               name: storage-config

@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"errors"
 	"net"
 
 	"github.com/rs/zerolog/log"
@@ -42,8 +43,10 @@ func (m *Membership) setupSerf() (err error) {
 	log.Info().Msg("setting up serf...")
 	addr, err := net.ResolveTCPAddr("tcp", m.BindAddr)
 	if err != nil {
-		return err
+		log.Error().Err(err).Msg("unable to resolve address")
+		return errors.New("unable to setup serf")
 	}
+	log.Info().Str("bind-addr", m.BindAddr).Str("addr", addr.String()).Msg("resolved address for serf...")
 	config := serf.DefaultConfig()
 	config.Init()
 	config.MemberlistConfig.BindAddr = addr.IP.String()
@@ -54,14 +57,16 @@ func (m *Membership) setupSerf() (err error) {
 	config.NodeName = m.Config.NodeName
 	m.serf, err = serf.Create(config)
 	if err != nil {
-		return err
+		log.Error().Err(err).Msg("unable to create serf config")
+		return errors.New("unable to setup serf")
 	}
 
 	go m.eventHandler()
 	if m.StartJoinAddrs != nil {
 		_, err = m.serf.Join(m.StartJoinAddrs, true)
 		if err != nil {
-			return err
+			log.Error().Err(err).Strs("addrs", m.StartJoinAddrs).Msg("unable join")
+			return errors.New("unable to setup serf")
 		}
 	}
 	log.Info().Msg("serf setup.")

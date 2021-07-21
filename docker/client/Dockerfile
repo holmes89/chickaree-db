@@ -9,6 +9,7 @@ FROM deps AS build-env
 ADD cmd ./cmd
 ADD chickaree ./chickaree
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-w -X main.docker=true" -o client cmd/client-server/main.go
+CMD ["/chickaree-db/client"]
 
 FROM scratch AS prod
 WORKDIR /

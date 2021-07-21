@@ -9,12 +9,12 @@ FROM deps AS build-env
 ADD cmd ./cmd
 ADD chickaree ./chickaree
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags "-w -X main.docker=true" -o storage cmd/storage-server/main.go
-CMD ["/storage"]
+CMD ["/chickaree-db/storage"]
 
 FROM scratch AS prod
 
 WORKDIR /
-ENV PORT 8080
-EXPOSE 8080
+EXPOSE 8040
+EXPOSE 8041
 COPY --from=build-env /chickaree-db/storage /
 CMD ["/storage"]
