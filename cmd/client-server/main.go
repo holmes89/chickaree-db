@@ -23,10 +23,14 @@ func main() {
 
 	opts := []grpc.DialOption{grpc.WithInsecure()}
 	conn, err := grpc.Dial(cfg.StorageServer, opts...)
+	log.Info().Str("url", cfg.StorageServer).Msg("dialing storage...")
 	if err != nil {
 		log.Fatal().Err(err).Str("url", cfg.StorageServer).Msg("failed to dial GRPC")
 	}
-	defer conn.Close()
+	defer func() {
+		log.Info().Msg("closing connections.")
+		conn.Close()
+	}()
 	client := chickaree.NewChickareeDBClient(conn)
 
 	tcpServer := redis.NewTCPServer(fmt.Sprintf(":%d", cfg.Port), client)
@@ -72,7 +76,7 @@ func (config *Config) LoadFromFile(path string) error {
 	return nil
 }
 
-func (config Config) LoadFromEnv() {
+func (config *Config) LoadFromEnv() {
 	if val := os.Getenv("STORAGE_SERVER"); val != "" {
 		config.StorageServer = val
 	}

@@ -7,9 +7,21 @@ services:
       context: .
       dockerfile: docker/client/Dockerfile
       target: prod
+    environment:
+      STORAGE_SERVER: storage:8400
+    ports:
+        - 6379:6379
   storage:
+    restart: always
     image: holmes89/chickaree-storage:0.0.4
     build:
       context: .
       dockerfile: docker/storage/Dockerfile
       target: prod
+    environment:
+        RAFT_DIR: /tmp
+        DATA_DIR: /tmp
+        BIND_ADDR: storage:8401
+        BOOT_STRAP: "true"
+    volumes:
+      - ./data:/tmp

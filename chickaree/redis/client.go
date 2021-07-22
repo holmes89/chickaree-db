@@ -3,6 +3,7 @@ package redis
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -13,11 +14,12 @@ import (
 
 type Client struct {
 	// incoming chan string
-	outgoing chan []byte
-	reader   *bufio.Reader
-	writer   *bufio.Writer
-	conn     net.Conn
-	client   chickaree.ChickareeDBClient
+	outgoing     chan []byte
+	reader       *bufio.Reader
+	writer       *bufio.Writer
+	conn         net.Conn
+	client       chickaree.ChickareeDBClient
+	leaderClient chickaree.ChickareeDBClient
 }
 
 func (c *Client) Read() {
@@ -47,7 +49,7 @@ func (client *Client) Listen() {
 	go client.Write()
 }
 
-func NewClient(connection net.Conn, cl chickaree.ChickareeDBClient) *Client {
+func NewClient(connection net.Conn, lc, cl chickaree.ChickareeDBClient) *Client {
 	if connection == nil {
 		panic("no connection")
 	}
@@ -55,11 +57,12 @@ func NewClient(connection net.Conn, cl chickaree.ChickareeDBClient) *Client {
 	reader := bufio.NewReader(connection)
 
 	client := &Client{
-		outgoing: make(chan []byte),
-		conn:     connection,
-		reader:   reader,
-		writer:   writer,
-		client:   cl,
+		outgoing:     make(chan []byte),
+		conn:         connection,
+		reader:       reader,
+		writer:       writer,
+		client:       cl,
+		leaderClient: lc,
 	}
 	client.Listen()
 
@@ -98,13 +101,16 @@ func (c *Client) Handle(req Request) []byte {
 
 func (c *Client) set(args []Arg) Response {
 	ctx := context.TODO()
+	if len(args)%2 != 0 {
+		return ErrResponse(errors.New("invalid request"))
+	}
 	req := &chickaree.SetRequest{
 		Key:   string(args[0]),
 		Value: args[1],
 	}
-	_, err := c.client.Set(ctx, req)
+	_, err := c.leaderClient.Set(ctx, req)
 	if err != nil {
-		ErrResponse(err)
+		return ErrResponse(err)
 	}
 	return OkResp
 }
@@ -116,10 +122,10 @@ func (c *Client) get(args []Arg) Response {
 	}
 	resp, err := c.client.Get(ctx, req)
 	if err != nil {
-		ErrResponse(err)
+		return ErrResponse(err)
 	}
 
-	if len(resp.Data) == 0 {
+	if resp.Data != nil && len(resp.Data) == 0 {
 		return NilStringResp
 	}
 

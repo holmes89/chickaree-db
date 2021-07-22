@@ -50,8 +50,8 @@ func NewServer(config ServerConfig) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) Mux() net.Listener {
-	return s.mux.Match(cmux.Any())
+func (s *Server) Mux() cmux.CMux {
+	return s.mux
 }
 
 func (s *Server) Close() error {
@@ -79,7 +79,7 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) setupMembership() (err error) {
-	log.Info().Str("bind-addr", s.ServerConfig.BindAddr).Str("node-name", s.ServerConfig.NodeName).Msg("setting up membership")
+	log.Info().Str("bind-addr", s.ServerConfig.BindAddr).Str("node-name", s.ServerConfig.BindAddr).Msg("setting up membership")
 	rpcAddr, err := s.ServerConfig.RPCAddr()
 	if err != nil {
 		log.Error().Err(err).Msg("unable to resolve rpc")
@@ -190,7 +190,15 @@ func (s *Server) GetServers(
 	ctx context.Context, req *chickaree.GetServersRequest,
 ) (
 	*chickaree.GetServersResponse, error) {
-	servers, err := s.store.GetServers()
+	log.Info().Msg("get servers request...")
+	nameIP := make(map[string]string)
+	for _, m := range s.membership.Members() {
+		rpc := m.Tags["rpc_addr"]
+		addr := fmt.Sprintf("%s:8400", m.Addr.String())
+		log.Info().Str("ip", addr).Str("rpc", rpc).Msg("server member search")
+		nameIP[rpc] = addr
+	}
+	servers, err := s.store.GetServers(nameIP)
 	if err != nil {
 		return nil, err
 	}

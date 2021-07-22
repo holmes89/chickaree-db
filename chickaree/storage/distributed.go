@@ -73,7 +73,7 @@ func (s *DistributedStorage) setupRaft() error {
 	fsm := &fsm{store: s.store}
 
 	maxPool := 5
-	timeout := 10 * time.Second
+	timeout := 30 * time.Second
 	transport := raft.NewNetworkTransport(
 		s.config.Raft.StreamLayer,
 		maxPool,
@@ -178,7 +178,7 @@ func (s *DistributedStorage) apply(reqType RequestType, req proto.Message) (
 	if err != nil {
 		return nil, err
 	}
-	timeout := 10 * time.Second
+	timeout := 30 * time.Second
 	future := s.raft.Apply(buf.Bytes(), timeout)
 	if future.Error() != nil {
 		return nil, future.Error()
@@ -253,20 +253,26 @@ func (s *DistributedStorage) Close() error {
 	return s.store.Close()
 }
 
-func (s *DistributedStorage) GetServers() ([]*api.Server, error) {
+func (s *DistributedStorage) GetServers(nameIP map[string]string) ([]*api.Server, error) {
+	leaderIP := string(s.raft.Leader())
+
 	future := s.raft.GetConfiguration()
 	if err := future.Error(); err != nil {
 		log.Error().Err(err).Msg("unable to get configuration")
 		return nil, errors.New("unable to get servers")
 	}
+
 	var servers []*api.Server
 	for _, server := range future.Configuration().Servers {
+		ip := nameIP[string(server.Address)]
+		log.Info().Str("addr", string(server.Address)).Str("ip", ip).Str("leader", leaderIP).Bool("is-leader", leaderIP == ip).Msg("server")
 		servers = append(servers, &api.Server{
 			Id:       string(server.ID),
 			RpcAddr:  string(server.Address),
-			IsLeader: s.raft.Leader() == server.Address,
+			IsLeader: leaderIP == ip,
 		})
 	}
+	log.Info().Int("servers", len(servers)).Msg("returning servers")
 	return servers, nil
 }
 
@@ -393,19 +399,19 @@ func (s *StreamLayer) Dial(
 	dialer := &net.Dialer{Timeout: timeout}
 	var conn, err = dialer.Dial("tcp", string(addr))
 	if err != nil {
-		log.Fatal().Err(err).Msg("unable to dial")
+		log.Error().Str("addr", string(addr)).Err(err).Msg("unable to dial")
 		return nil, errors.New("failed to dial")
 	}
 	// identify to mux this is a raft rpc
 	_, err = conn.Write([]byte{byte(RaftRPC)})
 	if err != nil {
-		log.Fatal().Err(err).Msg("unable to write raft rpc")
+		log.Error().Err(err).Msg("unable to write raft rpc")
 		return nil, errors.New("failed to dial")
 	}
 	if s.peerTLSConfig != nil {
 		conn = tls.Client(conn, s.peerTLSConfig)
 	}
-	return conn, err
+	return conn, nil
 }
 
 func (s *StreamLayer) Accept() (net.Conn, error) {

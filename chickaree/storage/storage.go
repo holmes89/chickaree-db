@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"github.com/rs/zerolog/log"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -41,11 +42,13 @@ func (s *store) Close() error {
 }
 
 func (s *store) Set(key, value []byte) error {
+	log.Info().Str("key", string(key)).Msg("set request")
 	return s.db.Update(func(tx *bolt.Tx) error {
 		return tx.Bucket(defaultBucket).Put(key, value)
 	})
 }
 func (s *store) Get(key []byte) (res []byte, err error) {
+	log.Info().Str("key", string(key)).Msg("get request")
 	s.db.View(func(tx *bolt.Tx) error {
 		res = tx.Bucket(defaultBucket).Get(key)
 		return nil
